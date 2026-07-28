@@ -13,7 +13,7 @@ doc records the **2026-07-08** sync and the **2026-07-20** one, which conflicted
 in a way the original version of this doc said was impossible (§3b).
 
 - **`upstream`** = `github.com/chatwoot/chatwoot` (the original repo).
-- **`origin`**  = `github.com/mujibulhaquetanim/meta-crm` (your fork).
+- **`origin`**  = `github.com/mujibulhaquetanim/mesh-crm` (your fork).
 
 Related: [`UPSTREAM_DIFF.md`](./UPSTREAM_DIFF.md) (what the fork changes and why it
 stays conflict-friendly), [`ARCHITECTURE.md`](./ARCHITECTURE.md) (the `custom/`
@@ -270,6 +270,66 @@ grep -ci chatwoot app/javascript/dashboard/i18n/locale/en/*.json
 
 ---
 
+## 3c. The clean case, and what the missing guards cost (2026-07-28)
+
+Sync of **15 upstream commits** (`19c96fc` → `ce8cbf2`). **Zero conflicts** — the
+first sync where neither class A nor class B fired.
+
+- **`db/schema.rb` merged clean.** The fork added no migrations this cycle, so
+  its version line still read `2026_07_18_000000` at the merge-base and only
+  upstream moved it (to `2026_07_24_000100`). One-sided change, nothing to
+  resolve. This is the "common case once the fork's schema work settles" that §2
+  predicts.
+- **No class-B conflict.** Upstream touched 50 files; none were files the fork
+  overlays or brands.
+
+Verification (all from §3b, run before pushing):
+
+| Check | Result |
+| --- | --- |
+| Conflict markers in tree | none (the hits in this file are its own examples) |
+| Overlay overlap (`custom/*.rb` vs upstream's 50 files) | none |
+| Branding counts, en locale JSON | 10 before → 10 after, same files |
+| `platform_managed` in `schema.rb` | 3 |
+| `custom/` · `spec/custom/` · `docs/fork/` | 37 · 14 · 50 files |
+
+> **Sort before diffing the branding counts.** `grep -c … en/*.json` does not
+> emit a stable file order, so a naive `diff` of two runs reports dozens of
+> phantom changes. Sort both sides; only then does "identical" mean anything.
+
+### The guards were missing, and it cost a real mistake
+
+Both §4 guards were **absent on this machine** when this sync started:
+`upstream`'s push URL was the live Chatwoot URL, and no `gh` default repo was
+set. §4 already warns they are machine-local and must be re-applied per clone —
+but nothing *checks*, so the gap is invisible until it bites.
+
+It bit: with no default repo, `gh pr create` defaulted the base to the **parent**
+repo and opened a PR against **public `chatwoot/chatwoot` (#15219)** carrying
+this fork's internal docs. Closed within a minute, but closed PRs are permanent
+public record.
+
+Two lessons, both now folded into §4/§5:
+
+1. **Run the §5 guard verification *before* any sync or PR work**, not "anytime".
+2. This doc said `gh repo set-default mujibulhaquetanim/meta-crm` — the repo is
+   `mesh-crm`. Following it literally sets nothing (that repo does not exist),
+   which is exactly how the guard came to be missing. Corrected throughout.
+
+Also: pass `--repo` explicitly on `gh pr create` in this repo. It costs nothing
+and does not depend on machine-local state that a fresh clone silently lacks.
+
+**Audit trail:**
+
+| Thing | SHA |
+|---|---|
+| merge-base | `19c96fcc0` |
+| fork `develop` before merge | `de9d386fb` |
+| `upstream/develop` tip merged in | `ce8cbf216` |
+| the merge commit | `8754b1c9e` |
+
+---
+
 ## 4. The guards that stop you pushing fork code into Chatwoot
 
 Two guards were installed on **2026-07-08** so your project code can never
@@ -288,7 +348,7 @@ git remote set-url --push upstream DISABLE_PUSH_TO_CHATWOOT_UPSTREAM
 ### Guard 2 — `gh pr create` targets the fork
 
 ```bash
-gh repo set-default mujibulhaquetanim/meta-crm
+gh repo set-default mujibulhaquetanim/mesh-crm
 ```
 
 Without this, `gh pr create` defaults a new PR's base to the **parent** repo
@@ -298,7 +358,7 @@ Without this, `gh pr create` defaults a new PR's base to the **parent** repo
 
 Opening a PR on **github.com** still defaults the *base repository* to the parent
 (chatwoot). When you create PRs in the browser, **check the "base repository"
-dropdown says `mujibulhaquetanim/meta-crm`** before clicking create.
+dropdown says `mujibulhaquetanim/mesh-crm`** before clicking create.
 
 ### ⚠️ These guards are machine-local, not committed
 
@@ -308,7 +368,12 @@ then re-verify.
 
 ---
 
-## 5. Verify the guards (run anytime)
+## 5. Verify the guards — FIRST, before any sync or PR
+
+Run this **before** §6 and before any `gh pr create`, not "anytime". The guards
+are machine-local (§4), so a fresh clone or new machine silently has none — and
+the failure mode is a PR opened against public upstream (§3c), which cannot be
+undone.
 
 ```bash
 # Guard 1: push URL must be the sentinel, and a push must fail
@@ -318,7 +383,7 @@ git remote -v | grep upstream
 git push upstream develop --dry-run    # must FAIL ("repository does not exist")
 
 # Guard 2: default repo must be the fork
-gh repo set-default --view             # -> mujibulhaquetanim/meta-crm
+gh repo set-default --view             # -> mujibulhaquetanim/mesh-crm
 ```
 
 Both were confirmed working on 2026-07-08.
@@ -331,6 +396,10 @@ Do this whenever you want upstream's latest, or when GitHub nags about the fork
 being behind:
 
 ```bash
+# 0. Guards FIRST (§5) — machine-local, absent on any fresh clone.
+git remote -v | grep upstream          # push URL must be the sentinel
+gh repo set-default --view             # must be mujibulhaquetanim/mesh-crm
+
 git fetch upstream develop             # NOT bare `git fetch upstream` — that pulls
                                        # every branch and can take many minutes
 git checkout develop
