@@ -8,9 +8,13 @@ repository."* on the fork's `develop`.
 that variant deletes your fork work. (When it offers a plain **"Update branch"**
 merge instead, it is safe — see §1.) Do the merge by hand (§6). Expect **at most
 two small conflicts**, both with a standing resolution rule: the `db/schema.rb`
-version line, and occasionally one of the OSS files the fork branded (§2). This
-doc records the **2026-07-08** sync and the **2026-07-20** one, which conflicted
-in a way the original version of this doc said was impossible (§3b).
+version line, and occasionally one of the OSS files the fork branded (§2). Then
+**bring the running stack back up (§6a)** — migrate, let Vite rebuild, restart
+rails if the bundle hash changed. A pushed merge is not a working stack. This
+doc records the **2026-07-08** sync, the **2026-07-20** one which conflicted in a
+way the original version of this doc said was impossible (§3b), and the
+**2026-07-28** one which merged clean but broke the stack twice on the way back
+up (§3c, §6a).
 
 - **`upstream`** = `github.com/chatwoot/chatwoot` (the original repo).
 - **`origin`**  = `github.com/mujibulhaquetanim/mesh-crm` (your fork).
@@ -412,6 +416,64 @@ git commit --no-edit
 git push origin develop                # fork only
 ```
 
+### 6a. Bring the running stack back up (do not skip)
+
+**A pushed merge is not a working stack.** The merge changes files under the
+running containers, so a sync is only done once the stack agrees. Both steps
+below were needed on 2026-07-28 and both surfaced as hard failures.
+
+```bash
+# 1. Apply any migrations upstream brought.
+docker compose -p mesh-crm exec -T rails bundle exec rails db:migrate
+```
+
+Skip it and every Chatwoot page 500s with `ActiveRecord::PendingMigrationError`.
+Note `doctor.sh` reports a bare "500" and *guesses* Vite — read the log, do not
+follow the guess:
+
+```bash
+docker compose -p mesh-crm logs --tail=60 rails | grep -iE 'migration|pending|vite'
+```
+
+**`db:migrate` re-dumps `db/schema.rb` and will dirty your tree.** That diff is
+usually pure environment churn — index re-ordering, and Postgres normalizing
+`where: "(a AND b)"` into `"((a AND b))"`. Discard it. Committing it adds
+permanent conflict surface against upstream for no gain. Before discarding,
+confirm the migration's real effect is already represented:
+
+```bash
+git diff db/schema.rb                       # version line should be UNCHANGED
+git show HEAD:db/schema.rb | grep <new_index_name>   # already committed via the merge?
+docker compose -p mesh-crm exec -T rails bundle exec rails runner \
+  'puts ActiveRecord::Base.connection.indexes(:conversations).map(&:name).inspect'
+git checkout db/schema.rb                   # only once both confirm
+```
+
+If the version line *did* change, or the new object is missing from both, do not
+discard — commit the regenerated dump instead (§3 note).
+
+```bash
+# 2. Let Vite rebuild, then decide whether rails needs a restart.
+docker compose -p mesh-crm logs --tail=6 vite     # wait for "built in <n>ms"
+```
+
+`bin/vite build --watch` empties `public/vite-dev/assets/` and rebuilds on every
+start (~110-170 s). During that window the SPA bundle 404s and the page renders
+blank — that is the rebuild, not a fault. **Then compare the hash:**
+
+| Bundle hash after rebuild | Action |
+|---|---|
+| **unchanged** (no frontend commits in the sync) | nothing — Rails' memoized manifest is still valid |
+| **changed** (upstream touched frontend) | `docker compose -p mesh-crm restart rails` — Rails memoized the OLD manifest at boot and will 404 forever otherwise |
+
+A sync almost always changes the hash. 2026-07-28: `v3app-yqLgjwUB` →
+`v3app-CGqUyaT6`, restart required.
+
+```bash
+# 3. Confirm.
+../agentic-str/scripts/setup/doctor.sh      # want: Healthy, exit 0
+```
+
 Then bring feature branches up to date off the fork, not upstream:
 
 ```bash
@@ -421,6 +483,12 @@ git merge develop                      # usually zero conflicts (schema already 
 
 ### Do / Don't
 
+- ✅ **After pushing, bring the stack back up (§6a):** `rails db:migrate`, let Vite
+  finish, `restart rails` if the bundle hash changed, then `doctor.sh`. A pushed
+  merge is not a working stack.
+- ✅ **Discard the `schema.rb` re-dump churn** after `db:migrate` (index order,
+  `where:` parenthesization) — but only once the version line is unchanged and
+  the new object is confirmed present (§6a).
 - ✅ **Merge** `upstream/develop` into your `develop`, resolve the conflicts in §2, push to `origin`.
 - ✅ Expect conflicts **only** in `db/schema.rb` and in the OSS files the fork edits
   directly (catalogued in [`UPSTREAM_DIFF.md` §0](./UPSTREAM_DIFF.md)) — mostly branding strings.
