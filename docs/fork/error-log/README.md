@@ -21,6 +21,8 @@ Add a line here per entry, newest first:
 
 - [2026-08-17 — rspec `test` service pinned to the pre-rename `chatwoot-rails:development` tag — nothing rebuilds it, so it silently drifts](./2026-08-17-rspec-test-image-still-pinned-to-pre-rename-tag.md)
 - [2026-08-10 — A tenant could read the platform's webhook HMAC secret, and delete the ingest webhook permanently (every vendor is an account administrator)](./2026-08-10-tenant-could-read-and-delete-the-platform-ingest-webhook.md)
+- [2026-08-06 — `vite`/`sidekiq` die on `GemNotFound` every recreate: BUNDLE_PATH (`/gems`) is not on the shared bundle volume](./2026-08-06-vite-and-sidekiq-lose-gems-because-bundle-path-is-not-on-the-shared-volume.md)
+- [2026-08-06 — Redis loses its NETWORK (not just its port) when meta-saas holds 6379; rails cannot resolve `redis` and migrations that enqueue jobs die](./2026-08-06-redis-port-collision-leaves-container-off-its-network.md)
 - [2026-07-27 — "Chatwoot never opens": Vite dev mode serves ~1600 unbundled modules through the tunnel (~2 min blank page)](./2026-07-27-vite-dev-mode-unusably-slow-behind-tunnel.md)
 - [2026-07-27 — Chatwoot returns 200 but renders a BLANK screen: Vite ≥6 `allowedHosts` 403s the Rails asset proxy](./2026-07-27-vite-allowed-hosts-blocks-rails-proxy-blank-spa.md)
 - [2026-07-27 — Every page 500s: rails probes Vite on its own localhost (`VITE_RUBY_HOST` unset), autoBuilds, and OOMs](./2026-07-27-rails-missing-vite-ruby-host-oom-autobuild.md)
