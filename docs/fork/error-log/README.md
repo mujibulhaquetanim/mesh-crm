@@ -19,6 +19,7 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-08-10 — A tenant could read the platform's webhook HMAC secret, and delete the ingest webhook permanently (every vendor is an account administrator)](./2026-08-10-tenant-could-read-and-delete-the-platform-ingest-webhook.md)
 - [2026-07-27 — "Chatwoot never opens": Vite dev mode serves ~1600 unbundled modules through the tunnel (~2 min blank page)](./2026-07-27-vite-dev-mode-unusably-slow-behind-tunnel.md)
 - [2026-07-27 — Chatwoot returns 200 but renders a BLANK screen: Vite ≥6 `allowedHosts` 403s the Rails asset proxy](./2026-07-27-vite-allowed-hosts-blocks-rails-proxy-blank-spa.md)
 - [2026-07-27 — Every page 500s: rails probes Vite on its own localhost (`VITE_RUBY_HOST` unset), autoBuilds, and OOMs](./2026-07-27-rails-missing-vite-ruby-host-oom-autobuild.md)
