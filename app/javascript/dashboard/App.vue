@@ -6,6 +6,7 @@ import UpdateBanner from './components/app/UpdateBanner.vue';
 import StatusBanner from './components/app/StatusBanner.vue';
 import PaymentPendingBanner from './components/app/PaymentPendingBanner.vue';
 import PendingEmailVerificationBanner from './components/app/PendingEmailVerificationBanner.vue';
+import LowBackupCodesBanner from './components/app/LowBackupCodesBanner.vue';
 import AgenticAiLimitBanner from './fork/AgenticAiLimitBanner.vue';
 import vueActionCable from './helper/actionCable';
 import { useRouter } from 'vue-router';
@@ -33,6 +34,7 @@ export default {
     PaymentPendingBanner,
     WootSnackbarBox,
     PendingEmailVerificationBanner,
+    LowBackupCodesBanner,
     AgenticAiLimitBanner,
   },
   setup() {
@@ -145,6 +147,7 @@ export default {
     <template v-if="currentAccountId">
       <PendingEmailVerificationBanner v-if="hideOnOnboardingView" />
       <PaymentPendingBanner v-if="hideOnOnboardingView" />
+      <LowBackupCodesBanner v-if="hideOnOnboardingView" />
       <AgenticAiLimitBanner v-if="hideOnOnboardingView" />
     </template>
     <router-view v-slot="{ Component }">
