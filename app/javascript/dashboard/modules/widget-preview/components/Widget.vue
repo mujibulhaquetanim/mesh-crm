@@ -243,7 +243,7 @@ const handleToggleWidget = () => {
           :script="widgetScript"
           lang="html"
           class="!text-start"
-          :codepen-title="`${websiteName} - Meta CRM Widget Test`"
+          :codepen-title="`${websiteName} - Mesh CRM Widget Test`"
           enable-code-pen
         />
       </div>

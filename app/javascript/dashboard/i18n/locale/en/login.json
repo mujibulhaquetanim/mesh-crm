@@ -1,6 +1,6 @@
 {
   "LOGIN": {
-    "TITLE": "Login to Meta CRM",
+    "TITLE": "Login to Mesh CRM",
     "EMAIL": {
       "LABEL": "Email",
       "PLACEHOLDER": "example{'@'}companyname.com",

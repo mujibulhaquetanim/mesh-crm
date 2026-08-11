@@ -123,11 +123,11 @@
         "CUSTOM_EMAIL_DOMAIN_ENABLED": "You can receive emails in your custom domain now."
       }
     },
-    "UPDATE_CHATWOOT": "An update {latestChatwootVersion} for Meta CRM is available. Please update your instance.",
+    "UPDATE_CHATWOOT": "An update {latestChatwootVersion} for Mesh CRM is available. Please update your instance.",
     "LEARN_MORE": "Learn more",
-    "PAYMENT_PENDING": "Your payment is pending. Please update your payment information to continue using Meta CRM",
-    "UPGRADE": "Upgrade to continue using Meta CRM",
-    "LIMITS_UPGRADE": "Your account has exceeded the usage limits, please upgrade your plan to continue using Meta CRM",
+    "PAYMENT_PENDING": "Your payment is pending. Please update your payment information to continue using Mesh CRM",
+    "UPGRADE": "Upgrade to continue using Mesh CRM",
+    "LIMITS_UPGRADE": "Your account has exceeded the usage limits, please upgrade your plan to continue using Mesh CRM",
     "OPEN_BILLING": "Open billing"
   },
   "FORMS": {

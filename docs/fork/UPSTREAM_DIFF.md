@@ -1,7 +1,7 @@
-# What the Meta CRM Fork Changes vs. Upstream Chatwoot
+# What the Mesh CRM Fork Changes vs. Upstream Chatwoot
 
 **Baseline:** `upstream` = `github.com/chatwoot/chatwoot` (the "default repo").
-**Fork:** `origin` = `github.com/mujibulhaquetanim/meta-crm`.
+**Fork:** `origin` = `github.com/mujibulhaquetanim/mesh-crm`.
 
 This file is the single, auditable inventory of **every** change the fork makes on
 top of upstream Chatwoot, so the diff stays small, reviewable, and friendly to
@@ -51,7 +51,7 @@ pulling future upstream releases. It is generated from an actual
 | Extension points | ~15 OSS/ent files, **+1–2 lines each** | trivial (append-only at EOF) | canonical `prepend_mod_with` hooks |
 | Bootstrap | `config/application.rb` | trivial (adjacent to enterprise lines) | eager-load + view path for `custom/` |
 | Frontend integration | ~13 OSS Vue/JS files | low (additive, isolated) | banner mount, quota UI, SSO redirect |
-| Branding | `config/locales/en.yml` + ~16 `en*.json`/Vue literals | low (value-only swaps) | "Chatwoot" → "Meta CRM" display copy |
+| Branding | `config/locales/en.yml` + ~16 `en*.json`/Vue literals | low (value-only swaps) | "Chatwoot" → "Mesh CRM" display copy |
 | Dev env & tooling | `docker-compose.yaml`, `.devcontainer/devcontainer.json`, `config/database.yml`, `AGENTS.md` (+ net-new `docker-compose.rspec.yaml`) | **moderate** — the largest conflict surface after `db/schema.rb`; upstream edits these occasionally | Docker-only Neon/Upstash dev stack; no runtime behavior ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
 | Spec adjustment | `spec/enterprise/.../accounts/agents_controller_spec.rb` | low | setup made cap-exact — the fork's model guard forbids over-cap creation ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
 
@@ -160,6 +160,11 @@ all are **additive and inert by default**:
   `<AgenticAiLimitBanner v-if="hideOnOnboardingView" />`. The banner itself lives
   in the fork-only dir `app/javascript/dashboard/fork/AgenticAiLimitBanner.vue`
   and renders nothing unless an `agentic_ai` cap is set and reached.
+  ⚠️ **Recurring class-C conflict point** (`UPSTREAM_SYNC.md` §2/§3d): upstream
+  adds its own banners to these same three lists — it added
+  `LowBackupCodesBanner` on 2026-08-11 and conflicted here. **Keep both sides,
+  fork's line last.** Taking upstream wholesale deletes the quota banner
+  silently.
 - **Quota UI composable** — new files
   `app/javascript/dashboard/composables/useQuota.js` and
   `.../i18n/locale/en/quota.json` (+ one register line in `.../en/index.js`).
@@ -176,7 +181,7 @@ all are **additive and inert by default**:
 - **`EXTERNAL_LOGIN_URL` exposure** — `app/controllers/dashboard_controller.rb`
   (+1): one additive key in `app_config`, defaulting to `''`.
 - **Branding copy** — `config/locales/en.yml` (new `errors.quota.*` /
-  `errors.sso_only_login` keys + "Chatwoot"→"Meta CRM" value swaps) and ~16
+  `errors.sso_only_login` keys + "Chatwoot"→"Mesh CRM" value swaps) and ~16
   frontend files (`i18n/locale/en/*.json` for dashboard/survey/widget plus a few
   Vue/JS string literals in `Code.vue`, `Widget.vue`, `ArticleSearch/Header.vue`,
   `SenderNameExamplePreview.vue`, `Mfa*.vue`, `CampaignEmptyStateContent.js`,

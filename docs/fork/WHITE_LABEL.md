@@ -30,7 +30,7 @@ the frontend reads the DB directly via `GlobalConfig.get`. Updating
 refreshes automatically.
 
 ```
-INSTALLATION_NAME='Meta CRM' BRAND_NAME='Meta CRM' \
+INSTALLATION_NAME='Mesh CRM' BRAND_NAME='Mesh CRM' \
   docker compose run --rm rails bundle exec rails runner "Custom::BrandingSetup.call"
 ```
 
@@ -84,16 +84,27 @@ instead of hand-editing sizes; verify output names match the originals.
 - All routes and API responses byte-compatible with pre-branding behavior
   (regression suite green).
 
-## Status — "Meta CRM" pass
+## Status — "Mesh CRM" pass
 
-Done in code (brand = "Meta CRM"):
+> **Renamed 2026-08-11: `Meta CRM` → `Mesh CRM`.** The pass originally branded the
+> installation "Meta CRM". That was a fifth name — the product register in
+> `../../../agentic-str/docs/README.md` §Naming lists only Mesh CRM (product),
+> meta-saas (system), `mesh-*` (deploy hosts) and Meshever (business). Since
+> `INSTALLATION_NAME` is unset in every env file, the hardcoded literals were
+> live vendor-visible copy rather than defaults, so the rename touched 23 code
+> files (44 strings). **The "Verified (Docker up)" line below predates the
+> rename** — it was confirmed against `Meta CRM`. The substitution mechanism is
+> unchanged and the rename was string-only, but the dev re-verification has not
+> been re-run. Do that on the next stack bring-up.
+
+Done in code (brand = "Mesh CRM"):
 
 - Layer 1 mechanism: `Custom::BrandingSetup` (run with `INSTALLATION_NAME` /
   `BRAND_NAME` set — this also flips `isACustomBrandedInstance`, auto-hiding
   Chatwoot-only surfaces: update/upgrade banners, year-in-review, "powered by"
   promos via `CustomBrandPolicyWrapper` / `usePolicy`).
 - Frontend i18n: all user-facing `Chatwoot` display strings in dashboard,
-  widget, and survey `en.json` → `Meta CRM` (word-boundary only; keys,
+  widget, and survey `en.json` → `Mesh CRM` (word-boundary only; keys,
   interpolation vars, and `window.chatwootSettings` left intact).
 - Frontend literals: survey logo alt, MFA backup-codes filename text,
   sender-name / campaign / article-search / codepen example strings.
@@ -116,7 +127,7 @@ Done in code (brand = "Meta CRM"):
 Verified (Docker up): `Custom::BrandingSetup` applied on dev; `spec/custom` +
 `spec/mailers/administrator_notifications` green (branding transparent when
 config unset, so upstream specs pass); MFA issuer and deletion emails render
-"Meta CRM" on dev; eslint 0 errors.
+"Mesh CRM" on dev; eslint 0 errors.
 
 Deferred:
 

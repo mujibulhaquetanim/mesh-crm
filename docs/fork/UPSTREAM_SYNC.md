@@ -6,15 +6,25 @@ repository."* on the fork's `develop`.
 
 **TL;DR:** When the banner offers to **discard commits**, do **not** click it —
 that variant deletes your fork work. (When it offers a plain **"Update branch"**
-merge instead, it is safe — see §1.) Do the merge by hand (§6). Expect **at most
-two small conflicts**, both with a standing resolution rule: the `db/schema.rb`
-version line, and occasionally one of the OSS files the fork branded (§2). Then
-**bring the running stack back up (§6a)** — migrate, let Vite rebuild, restart
-rails if the bundle hash changed. A pushed merge is not a working stack. This
-doc records the **2026-07-08** sync, the **2026-07-20** one which conflicted in a
-way the original version of this doc said was impossible (§3b), and the
+merge instead, it is safe — see §1.) Do the merge by hand (§6). Expect **a small
+number of conflicts** from the three classes in §2 — the `db/schema.rb` version
+line (A), an OSS file the fork branded (B), or both sides appending at the same
+anchor (C). Each has a standing resolution rule, and **the rules differ**: B says
+take upstream, C says keep both. Then **bring the running stack back up (§6a)** —
+migrate, let Vite rebuild, restart rails if the bundle hash changed. A pushed
+merge is not a working stack.
+
+This doc records the **2026-07-08** sync, the **2026-07-20** one which conflicted
+in a way the original version of this doc said was impossible (§3b), the
 **2026-07-28** one which merged clean but broke the stack twice on the way back
-up (§3c, §6a).
+up (§3c, §6a), and the **2026-08-11** one — 25 commits / 1238 files carrying the
+**Rails 7.2.3.1 upgrade**, which introduced conflict class C and needs a
+`bundle install` before the stack will boot at all (§3d).
+
+> **This doc has twice asserted a closed set of conflict classes and been wrong
+> both times** (§2). When you hit something that fits none of the three, resolve
+> it on the merits — additive or competing? — and add a §3x entry rather than
+> forcing it into an existing class.
 
 - **`upstream`** = `github.com/chatwoot/chatwoot` (the original repo).
 - **`origin`**  = `github.com/mujibulhaquetanim/mesh-crm` (your fork).
@@ -69,20 +79,33 @@ resolution rule (§2).
 
 ---
 
-## 2. The two things that can conflict
+## 2. The three things that can conflict
 
 > **Corrected 2026-07-20.** This section used to claim `db/schema.rb` was the
 > *only* possible conflict and that there were "zero conflicts in any actual
 > code." That is wrong, and it set the wrong expectation: the 2026-07-20 sync
 > conflicted on a **`.vue` file** while `schema.rb` merged clean — the exact
 > inverse of what this doc promised. See §3b for that case.
+>
+> **Corrected again 2026-08-11.** This section then claimed there were "exactly
+> **two**" classes. Also wrong. The 2026-08-11 sync hit a **third**: both sides
+> *added a different thing at the same anchor*, which is neither a generated-file
+> collision (A) nor an edit to a line the fork had changed (B). Class C is listed
+> below and worked through in §3d. The lesson is not the specific class — it is
+> that this section has now been wrong twice by asserting a closed set. Treat the
+> table as **the classes seen so far**, not an exhaustive list.
 
-There are exactly **two** classes of conflict, and they have different causes:
+There are **three** classes of conflict seen so far, with different causes:
 
 | # | Surface | Cause | Frequency |
 |---|---|---|---|
 | **A** | `db/schema.rb` version line | Both sides added migrations since the split | Only when *both* sides migrated |
 | **B** | The OSS files the fork **edits directly** | Upstream changes a line the fork also changed | Rare, and shrinking — see below |
+| **C** | An OSS **extension point** the fork appends to | Both sides *add* something at the same anchor; neither edited the other's line | Whenever upstream adds a sibling to a list the fork also extends |
+
+**Class C does not mean either side is wrong**, and it is the one class where the
+"take upstream's side" reflex is actively harmful — doing so silently deletes a
+fork feature. The resolution is almost always **keep both**. See §3d.
 
 **Class B is the one to actually watch.** The reassuring version of this doc was
 right about `custom/`: fork *behavior* lives there, upstream never touches that
@@ -218,10 +241,18 @@ Here that was strictly better on three counts:
 1. It is the pattern the fork's own `CLAUDE.md` prescribes — route brand strings
    through `replaceInstallationName` from `shared/composables/useBranding`
    instead of hardcoding.
-2. It still renders "Meta CRM": the composable substitutes
+2. It still renders the installation's brand: the composable substitutes
    `globalConfig.installationName`, which `Custom::BrandingSetup`
    (`custom/app/services/custom/branding_setup.rb`) populates from
    `INSTALLATION_NAME`.
+
+   > The diff above is quoted **verbatim from 2026-07-20**, when the fork's
+   > brand string was `Meta CRM`. On 2026-08-11 the brand was renamed to
+   > **Mesh CRM** to match the product register in
+   > `../../../agentic-str/docs/README.md` §Naming — "Meta CRM" was a fifth
+   > name that register never listed. The quote is left as-is because it is
+   > evidence of what that conflict actually looked like; everywhere else in
+   > `docs/fork/` now says Mesh CRM. See [`WHITE_LABEL.md`](./WHITE_LABEL.md).
 3. It **removes** a fork edit to an OSS file, so those two lines can never
    conflict again.
 
@@ -331,6 +362,111 @@ and does not depend on machine-local state that a fresh clone silently lacks.
 | fork `develop` before merge | `de9d386fb` |
 | `upstream/develop` tip merged in | `ce8cbf216` |
 | the merge commit | `8754b1c9e` |
+
+---
+
+## 3d. Class C, and the biggest sync so far (2026-08-11)
+
+Sync of **25 upstream commits** (`ce0612158` → `2fbcc715c`) — **1238 files,
++35 274/−7 760**. Every prior sync in this doc was 13–15 commits and ~50 files;
+this one is an order of magnitude larger because it carries the **Rails 7.2.3.1
+upgrade** (#13437). Budget accordingly: the merge itself is still fast, but the
+bring-up (§6a) is not, because the bundle changes.
+
+### The conflict was class C — keep BOTH sides
+
+One conflict, in `app/javascript/dashboard/App.vue`, at all three banner anchors:
+
+```
+<<<<<<< HEAD
+import AgenticAiLimitBanner from './fork/AgenticAiLimitBanner.vue';
+=======
+import LowBackupCodesBanner from './components/app/LowBackupCodesBanner.vue';
+>>>>>>> upstream/develop
+```
+
+Upstream #14103 added a low-backup-codes banner; the fork has its agentic-AI
+quota banner. **Neither touched the other's line** — both merely *appended* to
+the same three lists (import, `components:`, template). Git reports it as a
+conflict only because the insertions are adjacent.
+
+**Resolution: keep both**, fork's line **last** in each block, so the next
+upstream insertion lands above it and this stays a trivial re-resolve:
+
+```js
+import LowBackupCodesBanner from './components/app/LowBackupCodesBanner.vue';
+import AgenticAiLimitBanner from './fork/AgenticAiLimitBanner.vue';
+```
+
+> ⚠️ **§3b's rule does not apply here.** "Take upstream's side and drop the
+> fork's hardcode" is correct for class B, where upstream reimplements something
+> the fork had hacked. Applying it to class C would have **silently deleted the
+> agentic-AI quota banner** — a shipped fork feature — and nothing downstream
+> would have failed loudly. Before taking upstream wholesale, always ask whether
+> the two sides are *competing* (B) or *additive* (C).
+
+### Verification (§3b checks, all run before commit)
+
+| Check | Result |
+| --- | --- |
+| Conflict markers in tree | none |
+| Overlay overlap (`custom/*.rb` vs upstream's 1238 files) | **2**, both benign — see below |
+| Branding counts, en locale JSON | 20 before → 20 after, no file changed |
+| `platform_managed` in `schema.rb` | 3 |
+| `custom/` · `spec/custom/` · `docs/fork/` | 37 · 15 · 51 files |
+| `db/schema.rb` | merged clean — neither side migrated (§3c case) |
+
+The two overlay overlaps, and why neither breaks:
+
+- **`app/services/mfa/management_service.rb`** — the overlay overrides
+  `two_factor_provisioning_uri`, which still exists upstream (line 23). Upstream
+  only **added** `remaining_backup_codes_count` alongside it. No collision.
+- **`app/models/integrations/hook.rb`** — the overlay overrides *no method at
+  all*; it only injects `Custom::Concerns::QuotaGuard` via `self.prepended`.
+  Upstream narrowed `before_validation :ensure_hook_type` to `on: :create`,
+  which cannot affect an overlay with no `super` target. (QuotaGuard's own
+  `validate :ensure_quota_capacity` was already `on: :create`.)
+
+### Rails 7.2.3.1 — what to check, and what is NOT done by merging
+
+The merge lands the upgrade textually. It does **not** prove it runs:
+
+| Check | Value after merge |
+| --- | --- |
+| `Gemfile` / `Gemfile.lock` | both `7.2.3.1` |
+| `config.load_defaults` | still **7.0** — upstream kept the runtime upgrade separate from the behaviour changes, deliberately |
+| sidekiq / connection_pool | `7.3.10` / `2.5.5` (upstream pinned these) |
+| Azure Active Storage | unmaintained fork replaced with `azure-blob`, service name `microsoft` preserved |
+
+⚠️ **`bundle install` must run before the stack will boot** — the lockfile moved
+a whole dependency set. §6a's `db:migrate` will fail with a bundle error before
+it ever reaches the database if you skip it. A merge this size is not "done" at
+push time; it is done when `doctor.sh` is green.
+
+> Upstream also added `docs/rails_upgrade_assessment.md` in the same commit. It
+> is **upstream-owned** — do not edit it to reflect fork state, or it becomes
+> permanent conflict surface. Its step 1 (move to 7.2.3.1, keep 7.0 defaults) is
+> what this sync landed; steps 2–4 (8.0.5, 8.1.3, then defaults) remain upstream's
+> roadmap, not the fork's.
+
+### Also landed in this pass: the brand rename
+
+Unrelated to the merge but committed alongside it: the fork's white-label brand
+was **`Meta CRM` → `Mesh CRM`** across 23 code files (44 strings) and the
+`docs/fork/` set. "Meta CRM" was a fifth name that
+`../../../agentic-str/docs/README.md` §Naming never listed — that register says
+the vendor-facing product is **Mesh CRM**. `INSTALLATION_NAME` is unset in every
+env file, so the hardcoded literals were live vendor-visible copy, not defaults.
+See [`WHITE_LABEL.md`](./WHITE_LABEL.md).
+
+**Audit trail:**
+
+| Thing | SHA |
+|---|---|
+| merge-base | `ce0612158` |
+| fork `develop` before merge | `5f8aaeeee` |
+| `upstream/develop` tip merged in | `2fbcc715c` |
+| the merge commit | `e3db63a41d` |
 
 ---
 

@@ -22,7 +22,7 @@ const props = defineProps({
   },
   codepenTitle: {
     type: String,
-    default: 'Meta CRM Codepen',
+    default: 'Mesh CRM Codepen',
   },
 });
 

@@ -27,7 +27,7 @@ Chatwoot API or webhook contract**.
   (sessions overlay) **and** Google OAuth/SAML (omniauth overlay, shared
   `SsoOnlyLogin` gate) server-side; inert by default.
 - **White-label** — copy, installation configs, mailers, and MFA issuer branded
-  ("Meta CRM"); inert until configured.
+  ("Mesh CRM"); inert until configured.
 
 **Not-code remaining:** brand asset files (logos/favicons/PWA), deploy-time
 branding config values, and the manual cross-repo AI-loop run. See

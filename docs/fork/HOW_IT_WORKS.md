@@ -140,7 +140,7 @@ mindmap
       Password / Google / SAML refused
       Off by default
     Our branding
-      "Meta CRM" name & copy everywhere
+      "Mesh CRM" name & copy everywhere
       Branded emails & login screens
     AI usage meter
       Warning banner near the limit
@@ -189,7 +189,7 @@ central identity system. When switched on, this refuses passwords, Google login,
 and SAML — right at the server, not just by hiding buttons. It is **off by
 default**, so nothing changes unless someone deliberately turns it on.
 
-### 3.4 Our branding ("Meta CRM")
+### 3.4 Our branding ("Mesh CRM")
 
 The product shows our name, our copy, and branded emails instead of "Chatwoot".
 This is cosmetic only — no doorway or notification was renamed, so integrations

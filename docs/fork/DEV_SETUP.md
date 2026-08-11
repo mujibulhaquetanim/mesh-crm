@@ -98,7 +98,7 @@ Full write-up:
 
 ### Do NOT use `DATABASE_URL`
 
-It is tempting — Rails 7.1 honours it and it is one line instead of six. **Do
+It is tempting — Rails honours it and it is one line instead of six. **Do
 not.** `docker-compose.rspec.yaml:49-54` isolates the test database by
 overriding the discrete `POSTGRES_*` vars, and it does **not** override
 `DATABASE_URL`. Setting it makes `RAILS_ENV=test` connect to your live
