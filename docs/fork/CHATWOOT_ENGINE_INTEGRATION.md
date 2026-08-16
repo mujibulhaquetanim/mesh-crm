@@ -671,3 +671,85 @@ the tenant/brand name from your own config, not from these APIs.
 | `GET  /api/v1/accounts/{id}/conversations/{cid}/messages` | BOT | fetch history for the prompt |
 
 *All paths are relative to `BASE_URL`. All auth via `api_access_token` header.*
+
+---
+
+## 12. Amendment — 2026-08-16: webhook visibility is scoped by actor, not just by account
+
+*(§7's webhook mechanics — event names, headers, signature — are unchanged and
+still frozen per §8. What changed is who can SEE a webhook row through the
+Application API, and it changes what "adopt the existing webhook" (§4.3) is
+safe to do with which token.)*
+
+### 12.1 `GET /api/v1/accounts/{id}/webhooks` no longer returns platform-managed rows to a plain administrator
+
+Since **2026-08-10**
+(`custom/app/controllers/custom/api/v1/accounts/webhooks_controller.rb:31-34,54-59`),
+the account-scoped webhook endpoints filter by acting identity, not just by
+account:
+
+- `index` — `@webhooks = @webhooks.where(platform_managed: false) unless
+  platform_actor?`. A human administrator's `GET .../webhooks` no longer lists
+  the orchestrator-ingest webhook at all.
+- `fetch_webhook` (backs `show`/`update`/`destroy`) — raises
+  `ActiveRecord::RecordNotFound` (**404, not 403**) for a platform-managed row
+  when the caller is not a platform actor. The row still exists; it is simply
+  unreachable by id.
+
+`platform_actor?` is resolved from `Current.account_user.platform_managed?` —
+the acting identity's own persisted flag, never a request parameter (fork
+ADR-0005). This closed a live vulnerability, not a cosmetic one: every vendor
+is provisioned as account `administrator` (§4.2), and `WebhookPolicy#index?`
+grants on `administrator?` alone, so before this fix a tenant could read the
+ingest webhook's HMAC secret (and mint valid `X-Chatwoot-Signature` headers of
+their own) and delete the row outright. Full incident record:
+`docs/fork/error-log/2026-08-10-tenant-could-read-and-delete-the-platform-ingest-webhook.md`.
+
+### 12.2 The control plane's adopt path only works because it authenticates as the platform-managed service admin
+
+`agentic-str`'s `resolveWebhookSecret` (`chatwoot-provisioning.service.ts:413-432`)
+calls `listAccountWebhooks` (`chatwoot-api.adapter.ts:404-424`) with
+`account.accessToken` to find an existing webhook by URL and adopt its secret
+rather than re-create one. That call sees the ingest webhook **only** because
+`account.accessToken` is the tenant's dedicated service-admin user's token, and
+that user's `account_user` row was created with `platform_managed: true`
+(`chatwoot-api.adapter.ts:112`) — so §12.1's filter does not apply to it.
+
+**This is load-bearing, not incidental.** The fix in §12.1 deliberately kept
+`platform_actor?` exempt from the filter for exactly this reason — scoping the
+platform actor out too would have broken both provisioning and the webhook
+self-heal sweep (see the error-log's "`platform_actor?` is exempt, and this is
+load-bearing" note). Re-provisioning or repairing a tenant's webhook with a
+**plain admin token** — a human vendor's, or any `account_user` not flagged
+`platform_managed` — would:
+
+1. List zero webhooks at that URL (the ingest row is filtered out, §12.1).
+2. Fall through to `createAccountWebhook` (`chatwoot-api.adapter.ts:375-402`)
+   and create a **second** webhook at the same URL — Chatwoot does not dedupe
+   webhooks by URL.
+3. Silently double every delivery: each `message_created` /
+   `conversation_status_changed` event now fires twice, so two `AgentRun`s and
+   two customer-visible replies per message, at double token spend. Both
+   deliveries verify, so nothing errors on either side.
+
+Never call `listAccountWebhooks` / `resolveWebhookSecret` — or any adopt/repair
+path built on them — with anything but the tenant's platform-managed
+service-admin token.
+
+### 12.3 Pre-existing webhook rows were not backfilled — they are still tenant-visible
+
+Migration `20260704000000_add_platform_managed_to_platform_resources.rb` added
+the column with `default: false`
+(`db/migrate/20260704000000_add_platform_managed_to_platform_resources.rb:6-10`)
+and performs **no backfill**. `chatwoot-api.adapter.ts` has set
+`platform_managed: true` on every infra create (service admin, AI reply user,
+ingest webhook) since before that migration shipped, so any account
+provisioned since is unaffected. An account whose ingest webhook row predates
+the adapter setting the flag still carries `platform_managed: false`, and
+§12.1's filter does nothing for it: the row remains listable and deletable by
+the tenant's own administrator, same as before 2026-08-10.
+
+**Action for any pre-existing environment:** before relying on §12.1 as a
+security boundary, check for `webhooks.platform_managed = false` rows whose
+`url` matches the control plane's ingest endpoint and set the flag by hand.
+(Error-log Notes section, same file as §12.1.)
