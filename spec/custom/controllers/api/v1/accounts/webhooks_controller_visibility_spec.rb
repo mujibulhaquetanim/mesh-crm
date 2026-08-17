@@ -81,6 +81,35 @@ RSpec.describe 'Webhooks API (fork platform-managed visibility)', type: :request
       ids = response.parsed_body['payload']['webhooks'].map { |w| w['id'] }
       expect(ids).to include(platform_webhook.id, tenant_webhook.id)
     end
+
+    # `_webhook.json.jbuilder` now serializes `platform_managed`
+    # (CHATWOOT_ENGINE_INTEGRATION.md §12, 2026-08-17 amendment). The tenant
+    # listing is already scoped to `platform_managed: false` rows only
+    # (§12.1, above), so a tenant only ever sees `false` — this spec pins
+    # that the value is present at all, not just that the row is hidden.
+    it 'tells the tenant their own webhook is not platform-managed' do
+      get "/api/v1/accounts/#{account.id}/webhooks",
+          headers: admin.create_new_auth_token, as: :json
+
+      row = response.parsed_body['payload']['webhooks'].find { |w| w['id'] == tenant_webhook.id }
+      expect(row['platform_managed']).to be(false)
+    end
+
+    # This is the field the control plane's webhook sweep needs: it can only
+    # distinguish "adopted, already flagged" from "adopted, still needs
+    # healing" (§12.3) if the flag actually travels in the payload the
+    # platform actor's token reads.
+    it 'tells the platform actor which rows are platform-managed and which are not' do
+      get "/api/v1/accounts/#{account.id}/webhooks",
+          headers: platform_user.create_new_auth_token, as: :json
+
+      webhooks = response.parsed_body['payload']['webhooks']
+      platform_row = webhooks.find { |w| w['id'] == platform_webhook.id }
+      tenant_row = webhooks.find { |w| w['id'] == tenant_webhook.id }
+
+      expect(platform_row['platform_managed']).to be(true)
+      expect(tenant_row['platform_managed']).to be(false)
+    end
   end
 
   describe 'DELETE /api/v1/accounts/{account.id}/webhooks/{id}' do
