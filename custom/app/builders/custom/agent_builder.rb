@@ -13,12 +13,19 @@
 # (custom/app/controllers/custom/api/v1/accounts/agents_controller.rb), which
 # applies the same filter to the list/fetch paths.
 #
-# `AgentBuilder#can_add_agent?` was the one path left counting raw seats: a
-# tenant on a 2-agent plan with 1 real agent + 1 platform-managed infra user
-# would be blocked from adding a second real agent (2/2), even though only one
-# billable seat was in use. This override brings the create-time gate in line
-# with the single definition of "how many agents does this tenant have" that
-# every other enforcement path already uses.
+# `AgentBuilder#can_add_agent?` gates the single-`create` path (invoked from
+# `Api::V1::Accounts::AgentsController#create`): a tenant on a 2-agent plan
+# with 1 real agent + 1 platform-managed infra user would be blocked from
+# adding a second real agent (2/2), even though only one billable seat was in
+# use. This override brings that create-time gate in line with the single
+# definition of "how many agents does this tenant have" that every other
+# enforcement path uses.
+#
+# It is a SEPARATE fix from `available_agent_count`, the sibling guard on the
+# `bulk_create` (bulk-invite) path — that one lives on the controller, not
+# this builder, and is fixed in its own overlay,
+# custom/app/controllers/custom/api/v1/accounts/agents_controller.rb. Both had
+# to be found and fixed independently: neither routes through the other.
 #
 # Injected via the canonical `AgentBuilder.prepend_mod_with` hook already at
 # the bottom of app/builders/agent_builder.rb -- no OSS edit, zero
