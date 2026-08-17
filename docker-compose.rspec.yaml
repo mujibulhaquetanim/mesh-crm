@@ -31,7 +31,11 @@ services:
       - /data
 
   test:
-    image: chatwoot-rails:development
+    # Must match the tag `docker-compose.yaml`'s `rails` service actually
+    # builds. This has no `build:` of its own, so `docker compose run` never
+    # refreshes it — if this ever names a tag nothing else produces, it goes
+    # stale silently. See error-log 2026-08-17.
+    image: mesh-crm-rails:development
 
     env_file:
       - .env
