@@ -1,6 +1,8 @@
 require 'rails_helper'
 
-# Fork regression guard (backlog 13 P5, hardening-plan items 1/5): the Platform
+# Fork regression guard
+# (../agentic-str/docs/backlog/13-chatwoot-agent-visibility-and-quota-caps.md,
+# P5, hardening-plan items 1/5): the Platform
 # API — the ONLY path the control plane uses to provision tenant users
 # (`docs/fork/CHATWOOT_ENGINE_INTEGRATION.md` §11: `POST /platform/api/v1/users`)
 # — must never be able to mint a `SuperAdmin`. `SuperAdmin` is STI on the same
@@ -42,7 +44,17 @@ RSpec.describe 'Platform Users API (super admin privilege separation)', type: :r
       expect(SuperAdmin.exists?(email: 'escalate@vendor.example.com')).to be(false)
     end
 
-    it 'cannot mint a SuperAdmin by reusing an existing user’s email either' do
+    # NOT a second exercise of the strong-params strip above: `create` is
+    # `@resource = (User.from_email(user_params[:email]) || User.new(user_params))`
+    # — on the found-user branch, `user_params` is used only to look up the
+    # email; it is never assigned onto `@resource` at all (no `update!`/
+    # `assign_attributes`). So this pins a DIFFERENT, stronger invariant than
+    # the test above: an existing user's `type` can't be touched through this
+    # path regardless of what strong params would or wouldn't strip, because
+    # nothing here mass-assigns onto them in the first place. If `type` ever
+    # re-entered the permit list, THIS example would still pass — the one
+    # above is what would catch that.
+    it 'leaves an existing user’s type untouched — the found-user branch applies no attributes at all' do
       existing = create(:user, email: 'already-here@vendor.example.com')
 
       post '/platform/api/v1/users',

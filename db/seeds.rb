@@ -10,7 +10,9 @@ end
 
 ## Seeds for Local Development
 #
-# `Rails.env.development?`, not `unless Rails.env.production?` (backlog 13 P5):
+# `Rails.env.development?`, not `unless Rails.env.production?`
+# (../agentic-str/docs/backlog/13-chatwoot-agent-visibility-and-quota-caps.md,
+# P5):
 # this block creates a SuperAdmin with a well-known default credential
 # (`john@acme.inc` / `Password1!`). `unless production?` let it run in any
 # non-production environment, including staging — and staging is
