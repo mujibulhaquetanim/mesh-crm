@@ -69,4 +69,44 @@ RSpec.describe 'Agents API (fork platform-managed exclusion)', type: :request do
       expect(response).to have_http_status(:payment_required)
     end
   end
+
+  describe 'POST /api/v1/accounts/{account.id}/agents/bulk_create (bulk-invite guard count)' do
+    it 'counts only tenant seats against the cap, not platform-managed infra' do
+      # Plan allows 2 agents. Real seats = 1 (admin); the platform-managed infra
+      # user must NOT consume a slot, so bulk-inviting 1 more real agent still
+      # succeeds. Before the fix the raw account_user count (2) tripped
+      # `available_agent_count` to 0, 402ing the onboarding bulk-invite flow
+      # even though only one billable seat was in use.
+      account.update!(limits: { agents: 2 })
+      # Fetched outside the `expect` block: `create_new_auth_token` lazily
+      # persists `admin` on first use, which would otherwise leak into the
+      # `change(User, :count)` delta below and mask the real assertion.
+      headers = admin.create_new_auth_token
+
+      expect do
+        post "/api/v1/accounts/#{account.id}/agents/bulk_create",
+             params: { emails: ["bulk-#{SecureRandom.hex(4)}@example.com"] },
+             headers: headers, as: :json
+      end.to change(User, :count).by(1)
+
+      expect(response).to have_http_status(:success)
+    end
+
+    it 'still blocks a bulk-invite once real seats would exceed the cap' do
+      # Same plan/seat mix (1 real + 1 platform-managed infra, cap 2 -> only 1
+      # real slot free), but this invite asks for 2 new real agents. The
+      # filtered count must still enforce the cap against genuinely billable
+      # seats -- excluding infra is not the same as never enforcing the cap.
+      account.update!(limits: { agents: 2 })
+      headers = admin.create_new_auth_token
+
+      expect do
+        post "/api/v1/accounts/#{account.id}/agents/bulk_create",
+             params: { emails: ["bulk1-#{SecureRandom.hex(4)}@example.com", "bulk2-#{SecureRandom.hex(4)}@example.com"] },
+             headers: headers, as: :json
+      end.not_to change(User, :count)
+
+      expect(response).to have_http_status(:payment_required)
+    end
+  end
 end
