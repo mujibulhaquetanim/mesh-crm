@@ -206,7 +206,7 @@ not preloaded this way).
 Behavior: creates the operator only when missing; leaves an existing password alone
 unless `ROTATE`; only writes configs that changed. It intentionally does **not** flip
 `ENABLE_SSO_ONLY_LOGIN` (a tenant-facing control with lockout risk — enable that
-separately per `../../../meta-saas/docs/operations/chatwoot-access-lockdown.md`).
+separately per `../../../agentic-str/docs/operations/chatwoot-access-lockdown.md`).
 
 **Preload a fresh operator** (first time — email not yet in the DB):
 
@@ -318,7 +318,7 @@ deploy time:
 
 - Vendors never touch this — they land in their **own** Chatwoot account as
   `administrator` via the meta-saas SSO bounce. See
-  [`../../docs/operations/chatwoot-access-lockdown.md`](../../../meta-saas/docs/operations/chatwoot-access-lockdown.md)
+  [`../../docs/operations/chatwoot-access-lockdown.md`](../../../agentic-str/docs/operations/chatwoot-access-lockdown.md)
   (SSO-only login) and `CHATWOOT_ENGINE_INTEGRATION.md` §4.5/§4.6.
 - Plan limits are set by the **control plane** via the Platform API (whose token is a
   Platform App managed here), not by hand in this console. See `ENTITLEMENTS.md` /

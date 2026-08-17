@@ -36,38 +36,99 @@ keys keep their enterprise resolution chain untouched.
 ## Current plan catalog — what a new / free account gets
 
 A brand-new tenant starts on the **Trial** (free, $0) plan. The control plane
-(meta-saas) seeds three plans (`meta-saas/apps/api/prisma/seed.ts`); a tenant's
-`TenantEntitlement` overrides win when set. `PlanLimitsSyncService` pushes the
-**Chatwoot-enforced** subset (agents/teams/inboxes) into `accounts.limits` on
-provisioning and on every plan change — which is why a trial account shows
-`limits = {"teams" => 1, "agents" => 1, "inboxes" => 2}`.
+(agentic-str, renamed from meta-saas) seeds **four** plans from ONE canonical
+catalog — `agentic-str/packages/contracts/src/plans.ts` (`PLAN_CATALOG`),
+which both the database seed AND the public pricing page derive from, so a
+price or cap change cannot move one without the other. A tenant's
+`TenantEntitlement` overrides win when set.
 
-| Cap | **Trial (free)** | Starter | Pro | Enforced by |
+| Cap | **Trial (free)** | Starter | Pro | Enterprise |
 | --- | --- | --- | --- | --- |
-| Agents | **1** | 3 | 25 | **Chatwoot** — `accounts.limits.agents` (402 quota modal) |
-| Teams | **1** | 2 | 10 | **Chatwoot** — `accounts.limits.teams` |
-| Inboxes (vendor) | **1** (+1 system → `inboxes: 2`) | 3 (→4) | 25 (→26) | **Chatwoot** — `accounts.limits.inboxes` |
-| Messages / window | **500** | 5,000 | 50,000 | NestJS control plane |
-| LLM tokens / window | **100,000** | 2,000,000 | 20,000,000 | NestJS control plane |
-| Tool calls / window | **500** | 5,000 | 50,000 | NestJS control plane |
-| KB documents | **20** | 200 | 2,000 | NestJS control plane |
-| Allowed tools | **`kb_search`** | + `crm_lookup`, `order_lookup` | + `booking`, `ticketing` | NestJS policy engine |
+| Agents | 2 | 3 | 5 | 25 |
+| Teams | 2 | 4 | 7 | 25 |
+| Inboxes (vendor) | 2 (+1 system → `inboxes: 3`) | 4 (→5) | 7 (→8) | 25 (→26) |
+| Messages / month | 500 | 5,000 | 50,000 | 250,000 |
+| LLM tokens / month | 100,000 | 2,000,000 | 20,000,000 | 100,000,000 |
+| Tool calls / month | 500 | 5,000 | 50,000 | 250,000 |
+| KB documents | 20 | 200 | 2,000 | 20,000 |
+| MCP sources | 1 | 1 | 5 | 25 |
+| Data-source connectors | 1 | 1 | 3 | 10 |
+| Vendor images (live) | 50 | 250 | 1,500 | 10,000 |
+| Order drafts / hour | 30 | 120 | 600 | 3,000 |
+| Comment automations / month | 25 | 250 | 2,500 | 12,500 |
+| Unattended replies / month | 10 | 100 | 2,500 | 12,500 |
+| Allowed tools | `kb_search`, `mcp_tools`, `record_order_details` on **every** tier — see below |
+
+**`PlanLimitsSyncService` pushes ALL THIRTEEN Chatwoot-enforced keys into
+`accounts.limits` on every sync (provisioning, plan change, and the periodic
+agentic-AI usage writeback)** — not just agents/teams/inboxes. The fork's
+`update!(limits:)` is a wholesale REPLACE of the jsonb, not a merge, so a key
+absent from the payload silently resolves to `ChatwootApp.max_limit`
+(effectively unlimited) rather than "unchanged". The full key set
+(`CHATWOOT_LIMIT_KEYS`, `agentic-str/apps/api/src/chatwoot/chatwoot-limits.ts`):
+`agents`, `teams`, `inboxes`, `agentic_ai`, `webhooks`, `agent_bots`,
+`automation_rules`, `integrations`, `labels`,
+`custom_attribute_definitions`, `captain_documents`, `captain_responses`,
+`emails`. Only the first three are visible in the table above because they
+are the ones this document's earlier revision described; the rest are real
+enforced caps with no vendor-facing tier differentiation today (same number
+on every plan) except where `plan_usage_and_limits.rb`'s own resolution chain
+already bounds them.
+
+**Allowed tools does not differentiate by tier.** `crm_lookup`, `order_lookup`,
+`booking` and `ticketing` were **withdrawn from sale 2026-08-03**
+(`agentic-str/docs/changes/2026-08-03-pull-unbuilt-tools-from-sale.md`) — three
+had no implementation anywhere (`ToolRegistry` never registered them) and the
+fourth (`order_lookup`) always answered "unavailable" (`StubOrderProvider`),
+so granting any of them sold nothing and burned a tenant's tool-call budget on
+a dead end. They stay defined as identifiers (`WITHDRAWN_TOOLS` in
+`plans.ts`) rather than deleted, because existing `Plan.allowedTools` /
+`TenantEntitlementOverride.enabledCapabilities` rows already hold them and the
+policy engine matches on the stored string — but no tier grants them, and the
+per-tier "+ crm_lookup, order_lookup" / "+ booking, ticketing" differentiation
+this table used to describe no longer exists. Every tier's real tool
+differentiation today is `maxMcpSources` (1 / 1 / 5 / 25), not the tool list.
 
 Notes:
 
 - **The `+1` system inbox** is the platform "AI Handoff" API inbox
-  (`SYSTEM_RESERVED_INBOXES`), reserved on top of the plan so a `maxInboxes: 1`
-  trial still lets the vendor create **1** of their own channels (see
+  (`SYSTEM_RESERVED_INBOXES`), reserved on top of the plan so a `maxInboxes: 2`
+  trial still lets the vendor create **2** of their own channels (see
   `plan-limits-sync.service.ts`).
-- **"per window"** = a **rolling 15-day** usage window (`QUOTA_WINDOW_DAYS`,
-  default 15). Exceeding messages/tokens/tool-calls flips the tenant's
-  `aiEnabled` to `false` (reason `message_quota_exceeded` / `token_quota_exceeded`)
-  → **the AI stops auto-replying**. The window renews and the block **self-lifts**;
-  human replies in Chatwoot are never blocked and no data is deleted. This is the
-  `agentic_ai` limit surfaced here display-only (see the last section) but enforced
-  in NestJS.
 - **None of these are login / access gates.** They cap capacity and automation, not
   whether you can open or sign into an account — see the next section.
+
+## Enforcement window: the tenant's subscription period, not a rolling 15 days
+
+Messages/tokens/tool-calls are counted against the tenant's **own subscription
+period**, not a shared clock. Exceeding one flips the tenant's `aiEnabled` to
+`false` (reason `message_quota_exceeded` / `token_quota_exceeded`) →
+**the AI stops auto-replying**; human replies in Chatwoot are never blocked
+and no data is deleted. This is the `agentic_ai` limit surfaced here
+display-only (see the last section) but enforced in NestJS.
+
+**This replaced a rolling 15-day global window** (`QUOTA_WINDOW_DAYS`,
+deleted, zero references remain) that renewed roughly twice per paid month —
+so every tenant could consume about double their advertised "per month"
+allowance, and the two customer-facing descriptions (marketing's "per month"
+vs. the FAQ's "rolling 15-day window") openly contradicted each other. Fixed
+2026-07-19
+(`agentic-str/docs/changes/2026-07-19-subscription-quota-period.md`):
+
+- The window is now `Subscription.currentPeriodStart` → the resolved period
+  end, computed by the pure `resolveQuotaPeriod(subscription, now, graceDays)`.
+- **A successful payment is what advances the period — nothing else does.**
+  There is still no scheduled reset job.
+- **The lapse is deliberately NOT self-lifting.** A missed payment does
+  **not** start a fresh window; usage keeps accruing against the same one.
+  Letting a payment slip must never be cheaper than paying — the previous
+  15-day window rolled on its own schedule regardless of payment, which was
+  effectively a free quota refill for a non-paying tenant. Automation is cut
+  separately once the paid period passes its grace window
+  (`isPaidPeriodExpired` → `subscription_expired`); nothing about the quota
+  window itself grants a reprieve.
+- A trial gets one allowance for its whole 14 days, anchored at signup — not
+  renewed mid-trial the way the old window did.
 
 ## Not a limit: why a day-old account seems "inaccessible"
 
@@ -86,7 +147,7 @@ lockdown**, not a quota:
   your **existing** account. "Opening a new account" simply runs that same fresh SSO
   bounce, which is why *that* lands you in Chatwoot.
 
-See [`chatwoot-access-lockdown.md`](../../../meta-saas/docs/operations/chatwoot-access-lockdown.md)
+See [`chatwoot-access-lockdown.md`](../../../agentic-str/docs/operations/chatwoot-access-lockdown.md)
 for the lockdown mechanism and [`SUPER_ADMIN.md`](./SUPER_ADMIN.md) for operator access.
 
 ## Fork extension: `Custom::Account::PlanUsageAndLimits`

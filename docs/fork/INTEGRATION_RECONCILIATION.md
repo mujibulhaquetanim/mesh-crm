@@ -15,7 +15,7 @@ dev. Every "Chatwoot reality" row below is verified in this tree.
 | Signed webhook: `X-Chatwoot-Signature: sha256=HMAC_SHA256(secret,"{ts}.{rawBody}")`, `X-Chatwoot-Timestamp`, `X-Chatwoot-Delivery` | `lib/webhooks/trigger.rb:54-63` emits exactly these over the raw JSON body | ✅ byte-for-byte |
 | Replay window / raw-body HMAC | signed string is `"{ts}.{body}"` where `body` is the exact serialized payload | ✅ verify against raw bytes, never re-serialized JSON |
 | Secret at `payload.webhook.secret` | `app/views/api/v1/accounts/webhooks/create.json.jbuilder` wraps `payload.webhook`; `_webhook.json.jbuilder:6` exposes `secret` | ✅ |
-| Secret auto-generated, not settable | `WebhookSecretable` (`has_secure_token`); `webhook_params` permits only `inbox_id,name,url,subscriptions` | ✅ read it from the create response |
+| Secret auto-generated, not settable | `WebhookSecretable` (`has_secure_token`); `webhook_params` permits `inbox_id,name,url,subscriptions` **and, as of the platform-managed work, `platform_managed`** — stripped for any non-platform-actor caller (`webhooks_controller.rb:79-83`), so a tenant still cannot self-exempt a webhook from their quota | ✅ read the secret from the create response |
 | Platform `POST /users` returns `access_token` | `app/views/platform/api/v1/models/_user.json.jbuilder:1` → top-level `access_token` | ✅ works for both service-admin and bot flows |
 | Post reply via `.../conversations/{id}/messages {content, message_type:"outgoing"}` | stock Application API | ✅ |
 | Capacity-quota create denials as structured `402` | `custom/.../webhooks_controller.rb` + peers → `check_quota` → `render_payment_required` | ✅ |
@@ -123,6 +123,14 @@ CHATWOOT_WEBHOOK_SECRET=<shared secret, single-tenant fallback>
 PUBLIC_API_URL=http://host.docker.internal:3001   # reachable FROM Chatwoot
 ```
 
+**`CHATWOOT_WEBHOOK_SECRET` is a local-dev convenience only.** On the
+agentic-str side, `ChatwootWebhookSecretService.resolve` refuses to fall back
+to it when `NODE_ENV === 'production'` — production accepts only a signature
+verified against a per-account secret captured at provisioning (§4.3 above).
+Setting this env var in a production deploy has no effect and creates no
+security hole; it is read at all only in non-production environments, before
+any per-account secret exists to fall back FROM.
+
 Then run infra + API and register a tenant (auto-provisions account, inbox, the
 **platform-managed AI reply user** (`role: agent`), and the account webhook subscribed to
 `["message_created","conversation_status_changed"]`):
@@ -156,4 +164,3 @@ curl -sX POST http://localhost:3001/provisioning/register \
 | AI uses a human agent seat | AI `role: agent` user created without the flag | send `platform_managed: true` on the AI account_user (ADR-0005/0006) |
 | Reply loop / bot answers itself | not filtering on `message_type=="incoming"` | filter incoming-only before enqueue |
 | AI user/webhook eats a plan slot | created without `platform_managed: true` | set the flag on the AI reply user, webhook, and service admin user (ADR-0005/0006) |
-</content>

@@ -248,7 +248,7 @@ so the control plane defers to them rather than building a parallel path (the
 land in their own account via a Platform-minted, single-use **SSO link** (the meta-saas
 sidebar "Open Chatwoot workspace" → `/console` → `GET /chatwoot/handoff/sso-link`). They
 never touch the Chatwoot admin login or the Meta developer console. See
-`SUPER_ADMIN.md` and `../../../meta-saas/docs/operations/chatwoot-access-lockdown.md`.
+`SUPER_ADMIN.md` and `../../../agentic-str/docs/operations/chatwoot-access-lockdown.md`.
 
 **Where the Meta-app credentials live.** In **Chatwoot's** `InstallationConfig` /
 Super Admin (`FB_APP_ID`, `INSTAGRAM_APP_ID`, `WHATSAPP_CONFIGURATION_ID`, …) — **not**
@@ -324,5 +324,5 @@ This repository (code-verified): `app/javascript/dashboard/helper/facebookScopes
 ## 9. Related
 
 - `ENTITLEMENTS.md` (inbox caps via `accounts.limits`), `PROVISIONING.md`, `SUPER_ADMIN.md`
-- `ROLES_AND_CONTROL.md`, `../../../meta-saas/docs/operations/chatwoot-access-lockdown.md`
+- `ROLES_AND_CONTROL.md`, `../../../agentic-str/docs/operations/chatwoot-access-lockdown.md`
 </content>
