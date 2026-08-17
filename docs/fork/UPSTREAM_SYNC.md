@@ -17,9 +17,11 @@ merge is not a working stack.
 This doc records the **2026-07-08** sync, the **2026-07-20** one which conflicted
 in a way the original version of this doc said was impossible (§3b), the
 **2026-07-28** one which merged clean but broke the stack twice on the way back
-up (§3c, §6a), and the **2026-08-11** one — 25 commits / 1238 files carrying the
+up (§3c, §6a), the **2026-08-11** one — 25 commits / 1238 files carrying the
 **Rails 7.2.3.1 upgrade**, which introduced conflict class C and needs a
-`bundle install` before the stack will boot at all (§3d).
+`bundle install` before the stack will boot at all (§3d) — and the
+**2026-08-18** one, 57 commits / 285 files with **zero** conflicts, where the
+candidate set was *measured before merging* instead of guessed (§3e).
 
 > **This doc has twice asserted a closed set of conflict classes and been wrong
 > both times** (§2). When you hit something that fits none of the three, resolve
@@ -470,6 +472,128 @@ See [`WHITE_LABEL.md`](./WHITE_LABEL.md).
 
 ---
 
+## 3e. Stop guessing the conflict set — measure it (2026-08-18)
+
+Sync of **57 upstream commits** (`2fbcc715c` → `89a933f76`) — 285 files,
++9 677/−3 051. More than twice the commit count of any previous sync, and it
+produced **zero conflicts**.
+
+### The technique: compute the candidate set before merging
+
+Every previous entry in this doc discovered its conflicts by running the merge
+and reading what broke. You don't have to. Only files changed on **both** sides
+can conflict, and both lists are available before you touch anything:
+
+```sh
+git fetch https://github.com/chatwoot/chatwoot.git develop
+BASE=$(git merge-base HEAD FETCH_HEAD)
+git diff --name-only "$BASE" FETCH_HEAD | sort > /tmp/up.txt      # upstream's side
+git diff --name-only "$BASE" HEAD \
+  | grep -vE '^(custom/|docs/fork/|spec/custom/)' | sort > /tmp/fork.txt
+comm -12 /tmp/up.txt /tmp/fork.txt        # <- the ONLY files that can conflict
+```
+
+On 2026-08-18 that printed exactly four names, and all four auto-merged:
+
+| Candidate | Why it did not conflict |
+|---|---|
+| `db/schema.rb` | Fork added no migration this cycle, so its version line still read the merge-base's `2026_08_04_000003`; only upstream moved it (→ `2026_08_07_133000`). One-sided — the §3c case, not class A. |
+| `.../en/conversation.json` | Upstream edited different keys than the white-label pass |
+| `.../en/generalSettings.json` | same |
+| `.../en/integrations.json` | same |
+
+This turns §6's vague "expect 0-2 conflicts" into a number you know **before**
+you start, and it tells you in advance which standing rule (A/B/C) you'll need.
+Run it first on every future sync.
+
+### The scoped hotspots that did not fire
+
+This sync was planned expecting trouble in `db/schema.rb`, `Gemfile.lock`,
+`config/routes.rb`, the compose/devcontainer files, and the JS lockfile. The
+`comm` output above is why none of it happened: upstream **did not touch**
+`docker-compose.yaml`, `.devcontainer/devcontainer.json`, `config/database.yml`,
+either dockerfile, `config/application.rb`, `config/locales/en.yml`,
+`app/javascript/dashboard/App.vue`, or the webhooks jbuilder views.
+`config/routes.rb`, `Gemfile.lock` and `pnpm-lock.yaml` moved on upstream's side
+only and were taken verbatim — **no lockfile was hand-edited or regenerated**,
+which is the correct handling: the fork does not modify them, so there is never
+anything of its own to preserve.
+
+> **A one-sided lockfile still changes your containers.** `Gemfile.lock`'s whole
+> delta here was #15500 (hairtrigger 1.0.0→1.3.1, ruby_parser 3.20.0→3.22.0), and
+> the very next `run --rm test` died with `Bundler::GemNotFound`. That is not a
+> merge error — it is
+> [2026-07-20-rspec-test-service-loses-installed-gems](./error-log/2026-07-20-rspec-test-service-loses-installed-gems.md)
+> firing exactly as that entry predicted ("will keep failing after any sync that
+> touches `Gemfile.lock`"). Use its `sh -c "bundle install && …"` one-liner.
+
+### `#15500` is a lockfile fix, not a schema rewrite
+
+"fix: restore Rails 7.2 schema dumps (#15500)" reads like it rewrites
+`db/schema.rb`. It does not — `git show --stat 8d263a06a0` is **`Gemfile.lock`
+only**, 4 insertions / 3 deletions. It repairs the *dumper* (a hairtrigger that
+accepts `activerecord < 9`, a ruby_parser that parses Ruby 3.4) so that
+`db:schema:dump` completes with triggers intact. The fork already ran 7.2.3.1,
+so there was **no dump-format reconciliation to do**. Read the stat before
+believing a commit subject.
+
+### Verification (§3b checks, plus schema-load as loadable truth)
+
+| Check | Result |
+| --- | --- |
+| Conflict markers in tree | none |
+| Overlay overlap (`custom/*.rb` vs upstream's 285 files) | **0** |
+| All 17 `prepend_mod_with` extension points + `application.rb` bootstrap | present |
+| Branding counts, en locale JSON | 20 before → 20 after, no file changed |
+| `platform_managed` in `schema.rb` / webhooks jbuilder (#15) | 3 / intact |
+| `custom/` · `spec/custom/` · `docs/fork/` | 37 · 16 · 52 files |
+
+**Don't stop at grepping `schema.rb` — load it.** A merged generated file can be
+textually plausible and still not load. On a *freshly recreated* tmpfs test DB
+(`docker compose … rm -sf postgres-test` first, since the DB survives `run --rm`):
+
+```sh
+docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test \
+  sh -c "bundle install && bundle exec rails db:create db:schema:load"
+```
+
+→ 100 tables, `max(schema_migrations.version) = 20260807133000` (identical to the
+merged version line), 4 hairtrigger triggers retained. All three new upstream
+migrations confirmed *in the database*, not just in the file — `campaign_recipients`
+(+8 indexes), `campaigns.started_at/completed_at`,
+`index_conversations_on_account_id_status_created_at`,
+`index_agent_sessions_on_document_ids` — alongside all three fork
+`platform_managed` columns.
+
+Suites (the rspec runs are also the Rails-boot proof; the dev stack was not booted):
+
+| Suite | Result |
+| --- | --- |
+| `spec/custom` | 124 examples, **1 failure** — byte-identical to the pre-sync baseline |
+| Upstream specs over the fork's overlay surfaces | 96 examples, **0 failures** |
+
+> **Capture the baseline *before* you merge.** The tree is bind-mounted into the
+> test container, so once you merge you can no longer measure the "before". The
+> pre-sync run on `develop` gave 124/1, and the post-merge failure block diffs
+> clean against it except the timing line — which is what makes "pre-existing"
+> a measurement instead of an assumption.
+
+Overlay surfaces exercised: webhooks controller + request specs, platform
+`account_users` / `accounts` / `users` controllers, and both the OSS and
+enterprise agents controllers (including the fork-adjusted cap-exact spec from
+`UPSTREAM_DIFF.md` §6). Scope note: the **full** upstream suite was not run.
+
+**Audit trail:**
+
+| Thing | SHA |
+|---|---|
+| merge-base | `2fbcc715c` |
+| fork `develop` before merge | `12d8d7b890` |
+| `upstream/develop` tip merged in | `89a933f763` |
+| the merge commit | `305988f383` |
+
+---
+
 ## 4. The guards that stop you pushing fork code into Chatwoot
 
 Two guards were installed on **2026-07-08** so your project code can never
@@ -544,7 +668,20 @@ git fetch upstream develop             # NOT bare `git fetch upstream` — that 
                                        # every branch and can take many minutes
 git checkout develop
 git merge --ff-only origin/develop     # only if local is behind the fork remote
-git merge --no-ff upstream/develop     # expect 0-2 conflicts, see §2:
+
+# Capture the spec/custom baseline NOW — the tree is bind-mounted into the test
+# container, so after the merge the "before" is gone for good (§3e).
+docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test \
+  sh -c "bundle install && bundle exec rspec spec/custom" | tail -20
+
+# Measure the conflict candidate set BEFORE merging (§3e) — only files changed on
+# BOTH sides can conflict, so this is the complete list, known in advance.
+BASE=$(git merge-base HEAD upstream/develop)
+comm -12 <(git diff --name-only "$BASE" upstream/develop | sort) \
+         <(git diff --name-only "$BASE" HEAD \
+             | grep -vE '^(custom/|docs/fork/|spec/custom/)' | sort)
+
+git merge --no-ff upstream/develop     # conflicts ⊆ the list above, see §2:
                                        #  A) db/schema.rb version line -> keep the higher timestamp
                                        #  B) an OSS file the fork branded -> usually take upstream (§3b)
 git commit --no-edit
