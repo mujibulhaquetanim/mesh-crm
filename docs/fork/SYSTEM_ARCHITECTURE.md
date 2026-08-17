@@ -97,8 +97,9 @@ sequenceDiagram
     CP->>CW: POST /platform/api/v1/users {name,email,password}
     CW-->>CP: 201 {id, access_token} — USER_TOKEN (service admin)
     CP->>CW: POST /platform/api/v1/accounts/{id}/account_users {user_id, role:"administrator", platform_managed:true}
-    CP->>CW: POST /api/v1/accounts/{id}/inboxes {channel:{type:"api", webhook_url}}  (USER_TOKEN)
+    CP->>CW: POST /api/v1/accounts/{id}/inboxes {channel:{type:"api", webhook_url:""}}  (USER_TOKEN)
     CW-->>CP: 201 {id} — inbox
+    Note over CP,CW: webhook_url is EMPTY on purpose. Inbound delivery already<br/>comes from the ACCOUNT webhook (line below), which subscribes to<br/>message_created + conversation_status_changed with the per-tenant<br/>secret CP captured. A non-empty inbox-level webhook_url would spawn<br/>a SECOND delivery signed with a secret CP never stored — every one<br/>of those fails signature verification and is quarantined.
     CP->>CW: POST /platform/api/v1/users {name:"Acme AI", email, password} → AI user  (PLATFORM_TOKEN)
     CW-->>CP: 201 {id, access_token} — AI_REPLY_TOKEN, the AI identity (ADR-0006)
     CP->>CW: POST /platform/api/v1/accounts/{id}/account_users {user_id, role:"agent", platform_managed:true} — excluded from quota (ADR-0005)

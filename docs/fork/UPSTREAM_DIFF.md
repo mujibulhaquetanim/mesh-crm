@@ -78,6 +78,24 @@ Everything here is net-new; pulling upstream can never conflict with it.
   - Agents list scoping: `custom/app/controllers/custom/api/v1/accounts/agents_controller.rb`
     (overrides `agents` → excludes `platform_managed` seats from the list, the
     create-guard count, and edit/destroy lookup, ADR-0005).
+  - **Assignee-picker scoping (shipped, previously undocumented here):**
+    `custom/app/controllers/custom/api/v1/accounts/assignable_agents_controller.rb`
+    + `custom/app/services/custom/platform_managed_users.rb` — the SECOND
+    assignee-picker path. `GET .../assignable_agents` does not call
+    `Inbox#assignable_agents`, so scoping only the model (agents_controller
+    above) left the visible assignment dropdown still offering the platform
+    service admin. `PlatformManagedUsers` is the shared filter both surfaces
+    use; deliberately not applied to `Account#administrators` globally (~12
+    other consumers: mailers, ActionCable tokens, automation actions, branding
+    jobs). Landed `1fb4f53ee8` (2026-07-20).
+  - **The verified-identity check itself:**
+    `custom/app/controllers/custom/concerns/platform_actor.rb` — every
+    `platform_managed` exemption above (quota, list scoping, webhook
+    visibility) keys off `platform_actor?`, which reads the ACTING identity's
+    own persisted `platform_managed` flag rather than trusting a request
+    parameter, so a tenant identity can never self-grant the exemption. Landed
+    `2ff69f8b0f` (2026-07-05); every file above that says "gated on a verified
+    service identity" means this one.
   - Limits read API + agentic-AI display:
     `custom/app/controllers/custom/enterprise/api/v1/accounts_controller.rb`
     (also re-derives `agents.consumed` from the entitlement service so the UI
@@ -92,6 +110,16 @@ Everything here is net-new; pulling upstream can never conflict with it.
     `custom/app/services/custom/mfa/management_service.rb`,
     `custom/app/mailers/custom/administrator_notifications/account_notification_mailer.rb`,
     `custom/app/views/administrator_notifications/**/*.liquid`.
+- **`config/initializers/custom_prepends.rb`** (net-new, previously
+  undocumented here) — the fourth undocumented overlay file this pass found.
+  `AssignableAgentsController` above ships with no `prepend_mod_with` hook
+  upstream, so this initializer prepends `Custom::Api::V1::Accounts::
+  AssignableAgentsController` onto it directly, inside `to_prepare` (so the
+  prepend survives Zeitwerk reloading in development). Every other
+  customization in this fork resolves through an upstream-supplied hook (§3);
+  this is the one class where the fork had to add the hook itself, and it does
+  so from a new file rather than editing an OSS one — zero core-file edits
+  survives even the one class upstream didn't make extensible.
 - **`docs/fork/`** — spec, architecture, entitlements, AI loop, provisioning,
   white-label, the external integration contract, this file, and `error-log/`.
 - **`spec/custom/`** — fork test suite mirroring OSS layout.

@@ -106,6 +106,25 @@ There is no `Bearer` scheme. Which token to use:
 > Platform APIs work only on **self-hosted** installs. This fork is self-hosted
 > from Chatwoot's point of view (`DEPLOYMENT_ENV != cloud`), so they are available.
 
+> ⚠ **`PLATFORM_TOKEN` is app-scoped, not installation-scoped, and rotating it
+> to a NEW Platform App strands every account created under the old one.**
+> `PlatformController#validate_platform_app_permissible`
+> (`app/controllers/platform_controller.rb:32-36`) 401s ("Non permissible
+> resource") any `show`/`update`/`destroy` on a resource whose
+> `platform_app_permissibles` row does not name the CURRENT calling app —
+> `platform_app_permissibles` do **not** migrate when the token changes. This
+> already bit once in production: a Platform App rotation left one account
+> permissioned only to the retired app, silently failing its plan-limits sync
+> until diagnosed (full incident: `agentic-str/docs/troubleshooting/
+> 044-chatwoot-account-stranded-on-rotated-platform-app.md`). **Rotation must
+> mean minting a NEW token on the SAME Platform App** (Super Admin → Platform
+> Apps → the existing app → regenerate), never creating a second Platform App
+> and pointing `PLATFORM_TOKEN` at it. If a second app is unavoidable, every
+> existing account's permissible must be backfilled to it first
+> (`PlatformAppPermissible.create!(platform_app_id:, permissible: Account.find(id))`
+> per account) — this is a runbook/decision-owner action (edge-case audit
+> findings §H3), not something this contract enforces.
+
 ---
 
 ## 3. Authentication model (summary)
@@ -753,3 +772,17 @@ the tenant's own administrator, same as before 2026-08-10.
 security boundary, check for `webhooks.platform_managed = false` rows whose
 `url` matches the control plane's ingest endpoint and set the flag by hand.
 (Error-log Notes section, same file as §12.1.)
+
+**Owner: the platform operator running this Chatwoot instance, not the
+control plane.** This is a one-time manual `UPDATE`, tracked as **H2** in
+agentic-str's edge-case audit findings (`docs/superpowers/plans/
+2026-08-17-edge-case-audit-findings.md` §H): *"`platform_managed` backfill
+UPDATE on any pre-2026-07-04 environment (G3's operator half)."* No code in
+either repo closes it — the control plane's `verifyAllWebhooks` sweep adopts
+an existing unflagged webhook as-is rather than healing the flag (doing so
+would mean delete-and-recreate, which rotates the HMAC secret a tenant may
+already have copied — a decision the audit deliberately left to the owner
+rather than making silently). Until the backfill runs, any account
+provisioned before 2026-07-04 keeps its ingest webhook's secret readable
+(and the row itself deletable) by the tenant's own administrator, exactly as
+described above.
