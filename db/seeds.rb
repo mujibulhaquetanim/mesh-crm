@@ -9,7 +9,22 @@ if Rails.env.production?
 end
 
 ## Seeds for Local Development
-unless Rails.env.production?
+#
+# `Rails.env.development?`, not `unless Rails.env.production?`
+# (../agentic-str/docs/backlog/13-chatwoot-agent-visibility-and-quota-caps.md,
+# P5):
+# this block creates a SuperAdmin with a well-known default credential
+# (`john@acme.inc` / `Password1!`). `unless production?` let it run in any
+# non-production environment, including staging — and staging is
+# internet-reachable, so that credential was one `db:chatwoot_prepare` away
+# from being live on a public `/super_admin/sign_in` form. Scope it to
+# development only, where it is needed and the box is never public.
+#
+# Test does not need this data: specs build their own fixtures via
+# FactoryBot (see spec/factories/) rather than relying on this seed, and the
+# isolated rspec stack (docker-compose.rspec.yaml) never invokes db:seed —
+# only db:create/db:schema:load (docs/fork/DEV_SETUP.md).
+if Rails.env.development?
 
   # Enables creating additional accounts from dashboard
   installation_config = InstallationConfig.find_by(name: 'CREATE_NEW_ACCOUNT_FROM_DASHBOARD')
