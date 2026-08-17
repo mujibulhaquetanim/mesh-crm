@@ -106,6 +106,25 @@ There is no `Bearer` scheme. Which token to use:
 > Platform APIs work only on **self-hosted** installs. This fork is self-hosted
 > from Chatwoot's point of view (`DEPLOYMENT_ENV != cloud`), so they are available.
 
+> ⚠ **`PLATFORM_TOKEN` is app-scoped, not installation-scoped, and rotating it
+> to a NEW Platform App strands every account created under the old one.**
+> `PlatformController#validate_platform_app_permissible`
+> (`app/controllers/platform_controller.rb:32-36`) 401s ("Non permissible
+> resource") any `show`/`update`/`destroy` on a resource whose
+> `platform_app_permissibles` row does not name the CURRENT calling app —
+> `platform_app_permissibles` do **not** migrate when the token changes. This
+> already bit once in production: a Platform App rotation left one account
+> permissioned only to the retired app, silently failing its plan-limits sync
+> until diagnosed (full incident: `agentic-str/docs/troubleshooting/
+> 044-chatwoot-account-stranded-on-rotated-platform-app.md`). **Rotation must
+> mean minting a NEW token on the SAME Platform App** (Super Admin → Platform
+> Apps → the existing app → regenerate), never creating a second Platform App
+> and pointing `PLATFORM_TOKEN` at it. If a second app is unavoidable, every
+> existing account's permissible must be backfilled to it first
+> (`PlatformAppPermissible.create!(platform_app_id:, permissible: Account.find(id))`
+> per account) — this is a runbook/decision-owner action (edge-case audit
+> findings §H3), not something this contract enforces.
+
 ---
 
 ## 3. Authentication model (summary)
