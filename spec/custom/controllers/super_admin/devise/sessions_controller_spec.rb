@@ -67,6 +67,34 @@ RSpec.describe 'Super Admin MFA enforcement', type: :request do
         post '/super_admin/sign_in', params: sign_in_params
         expect(response).to redirect_to(super_admin_session_path)
       end
+
+      it 'refuses cleanly (no 500) when otp_attempt is a crafted array instead of a string' do
+        post '/super_admin/sign_in',
+             params: { super_admin: { email: super_admin.email, password: 'Password1!', otp_attempt: ['x'] } }
+        expect(response).to redirect_to(super_admin_session_path)
+      end
+
+      it 'refuses a replayed TOTP code — the same code cannot sign in twice' do
+        otp = super_admin.current_otp
+        post '/super_admin/sign_in', params: sign_in_params(otp_attempt: otp)
+        expect(response).to redirect_to(super_admin_root_path)
+
+        get '/super_admin/logout'
+
+        post '/super_admin/sign_in', params: sign_in_params(otp_attempt: otp)
+        expect(response).to redirect_to(super_admin_session_path)
+      end
+
+      it 'refuses a replayed backup code — a used code cannot sign in twice' do
+        code = super_admin.generate_backup_codes!.first
+        post '/super_admin/sign_in', params: sign_in_params(otp_attempt: code)
+        expect(response).to redirect_to(super_admin_root_path)
+
+        get '/super_admin/logout'
+
+        post '/super_admin/sign_in', params: sign_in_params(otp_attempt: code)
+        expect(response).to redirect_to(super_admin_session_path)
+      end
     end
 
     context 'when the operator has not enrolled OTP' do

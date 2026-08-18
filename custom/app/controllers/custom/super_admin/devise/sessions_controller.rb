@@ -48,7 +48,11 @@ module Custom::SuperAdmin::Devise::SessionsController
   # or a backup code. Both branches reuse the upstream service — this just
   # decides which upstream check to try, it doesn't verify anything itself.
   def mfa_otp_valid?
-    attempt = params.dig(:super_admin, :otp_attempt)
+    # .to_s: a crafted super_admin[otp_attempt][]=x (array) or [otp_attempt][k]=x
+    # (hash) param would otherwise reach devise-two-factor's internal
+    # `code.gsub` as a non-String and 500 instead of refusing cleanly.
+    # Coercing here guarantees a String reaches the upstream service either way.
+    attempt = params.dig(:super_admin, :otp_attempt).to_s
     return false if attempt.blank?
 
     Mfa::AuthenticationService.new(user: @super_admin, otp_code: attempt).authenticate ||

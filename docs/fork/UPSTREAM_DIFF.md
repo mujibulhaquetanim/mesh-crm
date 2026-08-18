@@ -46,6 +46,7 @@ pulling future upstream releases. It is generated from an actual
 | Layer | Location | Conflict risk on upstream pull | Nature |
 | --- | --- | --- | --- |
 | Fork overlay | `custom/**` | none (upstream has no `custom/`) | all real fork logic |
+| Shadowed views | `custom/app/views/super_admin/devise/sessions/new.html.erb` | **none, and that's the risk** — a full ERB copy under `custom/app/views` never produces a git conflict, so an upstream change to the *original* `app/views/super_admin/devise/sessions/new.html.erb` is silently never picked up; the shadow just keeps rendering its frozen copy. Re-diff this file against upstream's current version on every upstream pull — the pinned revision in the shadow's own header comment (`42f6621afb4e8a4ba5b6c121ca54bf46ac345fab`) is the diff anchor. | one marked `otp_attempt` field, flag-gated |
 | Fork docs | `docs/fork/**` | none | this documentation + error log |
 | Fork specs | `spec/custom/**` | none | fork test suite |
 | Extension points | ~18 OSS/ent files, **+1–2 lines each** | trivial (append-only at EOF) | canonical `prepend_mod_with` hooks |
@@ -122,24 +123,40 @@ Everything here is net-new; pulling upstream can never conflict with it.
     lexically nested inside `module Custom; ... end` (compact `class
     Custom::Foo` definitions are unaffected — see Ruby's `Module.nesting`).
     `custom/app/services/custom/super_admin_bootstrap.rb`'s two `SuperAdmin`
-    references were fixed to `::SuperAdmin` for this reason (same for
-    `Mfa::ManagementService` → `::Mfa::ManagementService`, since `Custom::Mfa`
-    is an existing namespace too). Any future `Custom::*` file that references
-    `SuperAdmin` or `Mfa::*` unqualified must qualify it the same way.
+    references (that file predates this PR and uses the nested `module
+    Custom; class ...` form) were fixed to `::SuperAdmin` for this reason.
+    `custom/app/services/custom/super_admin_mfa_enroll.rb` was written using
+    **compact** class syntax (`class Custom::SuperAdminMfaEnroll`) specifically
+    to sidestep the same risk for its own bare `SuperAdmin`/`Mfa::ManagementService`
+    references (`Custom::Mfa` is also an existing namespace, from
+    `custom/app/services/custom/mfa/`) — no `::` qualification was needed
+    there as a result. **Forward-looking guidance, not a change record:** any
+    future `Custom::*` file written in the *nested* `module Custom; class
+    Foo; end; end` form that references `SuperAdmin`, `Mfa::*`, or any other
+    name that has become a `Custom::*` namespace must qualify it with a
+    leading `::`; files written in the *compact* form are safe from this
+    class of bug by construction. Full writeup:
+    `docs/fork/error-log/2026-08-18-custom-super-admin-namespace-shadows-superadmin-model.md`.
   - Branding/MFA/mailers: `custom/app/services/custom/branding_setup.rb`,
     `custom/app/services/custom/mfa/management_service.rb`,
     `custom/app/mailers/custom/administrator_notifications/account_notification_mailer.rb`,
     `custom/app/views/administrator_notifications/**/*.liquid`.
 - **`config/initializers/custom_prepends.rb`** (net-new, previously
   undocumented here) — the fourth undocumented overlay file this pass found.
-  `AssignableAgentsController` above ships with no `prepend_mod_with` hook
-  upstream, so this initializer prepends `Custom::Api::V1::Accounts::
-  AssignableAgentsController` onto it directly, inside `to_prepare` (so the
-  prepend survives Zeitwerk reloading in development). Every other
-  customization in this fork resolves through an upstream-supplied hook (§3);
-  this is the one class where the fork had to add the hook itself, and it does
-  so from a new file rather than editing an OSS one — zero core-file edits
-  survives even the one class upstream didn't make extensible.
+  Two classes ship with no `prepend_mod_with` hook of their own, so this
+  initializer prepends onto them directly, inside `to_prepare` (so the
+  prepend survives Zeitwerk reloading in development):
+  - `Api::V1::Accounts::AssignableAgentsController` ← `Custom::Api::V1::Accounts::AssignableAgentsController`
+    (assignee-picker scoping, §2 above).
+  - `Devise::PasswordsController` ← `Custom::DeviseOverrides::SuperAdminPasswordsGuard`
+    (super_admin password-reset MFA guard — see the Super Admin MFA
+    enforcement bullet above and `docs/fork/SUPER_ADMIN.md` §4.3).
+
+  Every other customization in this fork resolves through an upstream-supplied
+  hook (§3); these are the two classes where the fork had to add the hook
+  itself, and it does so from a new file rather than editing an OSS one —
+  zero core-file edits survives even the classes upstream didn't make
+  extensible.
 - **`docs/fork/`** — spec, architecture, entitlements, AI loop, provisioning,
   white-label, the external integration contract, this file, and `error-log/`.
 - **`spec/custom/`** — fork test suite mirroring OSS layout.

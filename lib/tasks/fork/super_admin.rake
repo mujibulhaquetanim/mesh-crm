@@ -24,7 +24,17 @@ namespace :fork do
     task mfa_enroll: :environment do
       result = Custom::SuperAdminMfaEnroll.run
 
-      if result.provisioning_uri
+      case result.status
+      when :skipped_no_email
+        # A typo'd/unset SUPER_ADMIN_MFA_EMAIL must never look like success —
+        # the service already logs this via Rails.logger, but that doesn't
+        # always reach this terminal, and this task's whole point is to
+        # exist right before someone flips SUPER_ADMIN_ENFORCE_MFA=true.
+        puts "\nSUPER_ADMIN_MFA_EMAIL not set — nothing enrolled. Nobody is MFA-enrolled by this run."
+      when :skipped
+        puts "\n#{result.email} already has MFA enrolled — unchanged " \
+             '(set SUPER_ADMIN_MFA_ROTATE=true to rotate).'
+      else
         puts "\n#{result.status == :rotated ? 'Rotated' : 'Enrolled'} MFA for #{result.email}."
         puts "\nProvisioning URI — add it to an authenticator app now (shown ONCE):"
         puts result.provisioning_uri

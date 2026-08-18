@@ -162,9 +162,15 @@ un-enrolled operator is locked out (by design — see §4.3's fail-closed note).
 3. Background queues are at **`/monitoring/sidekiq`** (same session). Sign out at
    **`/super_admin/logout`**.
 
-There is **no** self-serve password-reset UI and no email flow for this scope — rotate
-via the bootstrap or the console (§4.1 / §4.2). If you are locked out, you need host /
-DB access to reset it. MFA is available but off by default (§4.3) — until you enable
+There **is** a stock Devise self-serve password-reset flow at this scope
+(`GET/POST /super_admin/password`) — `devise_for :super_admins` doesn't skip
+`:recoverable`, so it's routed and mailer-dependent. It is **not** the
+recommended rotation path — use the bootstrap or the console (§4.1 / §4.2)
+instead. With `SUPER_ADMIN_ENFORCE_MFA` on, a completed reset no longer
+auto-signs you in (§4.3 explains why and what guards it) — you land back on
+`/super_admin/sign_in` and still need your TOTP/backup code if enrolled. If
+you are fully locked out, you need host / DB access to reset it. MFA is
+available but off by default (§4.3) — until you enable
 `SUPER_ADMIN_ENFORCE_MFA` for every operator, **do not expose `/super_admin`
 publicly** — reach it over VPN / an IP allowlist (§5).
 
@@ -300,15 +306,25 @@ The `otp_*` columns on `users` exist but stock Chatwoot's Super Admin login neve
 checks them. The fork closes this behind a flag, in the `custom/` overlay
 (upstream-merge-safe, same pattern as §4.1):
 
-- **Enforcement:** `custom/app/controllers/custom/super_admin/devise/sessions_controller.rb`
+- **Enforcement (sign-in):** `custom/app/controllers/custom/super_admin/devise/sessions_controller.rb`
   (`Custom::SuperAdmin::Devise::SessionsController`), hooked onto the one upstream
   line `SuperAdmin::Devise::SessionsController.prepend_mod_with(...)`.
+- **Enforcement (password-reset guard):** `devise_for :super_admins` doesn't skip
+  `:recoverable`, so stock `Devise::PasswordsController` is also live at
+  `/super_admin/password` — a second login-shaped path that never passes through
+  the controller above. `custom/app/controllers/custom/devise_overrides/super_admin_passwords_guard.rb`
+  (`Custom::DeviseOverrides::SuperAdminPasswordsGuard`) closes it: wired via
+  `config/initializers/custom_prepends.rb` (Devise's stock controller ships no
+  `prepend_mod_with` hook of its own, so this is the fork's documented
+  mechanism for that case — see `UPSTREAM_DIFF.md` §2).
 - **Enrollment task (thin shim):** `lib/tasks/fork/super_admin.rake` →
   `bundle exec rails fork:super_admin:mfa_enroll`.
 - **Enrollment service:** `custom/app/services/custom/super_admin_mfa_enroll.rb`
   (`Custom::SuperAdminMfaEnroll`).
 - **Tests:** `spec/custom/controllers/super_admin/devise/sessions_controller_spec.rb`,
-  `spec/custom/services/super_admin_mfa_enroll_spec.rb`.
+  `spec/custom/controllers/devise_overrides/super_admin_passwords_guard_spec.rb`,
+  `spec/custom/services/super_admin_mfa_enroll_spec.rb`,
+  `spec/custom/views/super_admin/devise/sessions/new_spec.rb`.
 
 **Behavior with `SUPER_ADMIN_ENFORCE_MFA` unset (default):** identical to before —
 password alone signs in. Nothing here changes until you opt in.
@@ -324,9 +340,19 @@ password alone signs in. Nothing here changes until you opt in.
   message as a bad password — the response never reveals whether an account has MFA
   enrolled. rack_attack's login throttle (§1, `config/initializers/rack_attack.rb`)
   applies unchanged, since it throttles the route, not this controller.
-- **There is no bypass.** If you enable the flag before enrolling an operator, that
-  operator is locked out of `/super_admin` until enrolled. Recovery is host access
-  (same story as a lost password — no email flow for this scope, see §4.0).
+- **The password-reset route cannot mint a session either.** Stock Devise wires
+  `/super_admin/password` (§4.0) as a second, independent login-shaped path — a
+  successful reset there normally auto-signs the resource in
+  (`sign_in_after_reset_password`, Devise's default), which would bypass every
+  check above with zero OTP involved. With the flag on, the fork's
+  `Custom::DeviseOverrides::SuperAdminPasswordsGuard` (see the Enforcement
+  bullets above) suppresses that auto-sign-in for this scope: the password
+  **does** get reset, but no session is minted — the operator is redirected to
+  `/super_admin/sign_in` and still needs their TOTP/backup code from there if
+  enrolled, or hits the un-enrolled refusal above if not.
+- **If you enable the flag before enrolling an operator, that operator is
+  locked out of `/super_admin` entirely** — the password-reset route no longer
+  offers a path around that (see the bullet above). Recovery is host access.
 
 **Enroll an operator** (must already exist — run `fork:super_admin:bootstrap`
 first if not):
