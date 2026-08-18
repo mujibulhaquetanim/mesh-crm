@@ -13,7 +13,17 @@
 Rails.application.config.to_prepare do
   # Assignee picker: upstream builds the list inline instead of delegating to
   # Inbox#assignable_agents, so the model override alone does not cover it.
-  ::Api::V1::Accounts::AssignableAgentsController.prepend(
-    ::Custom::Api::V1::Accounts::AssignableAgentsController
+  Api::V1::Accounts::AssignableAgentsController.prepend(
+    Custom::Api::V1::Accounts::AssignableAgentsController
+  )
+
+  # Super Admin password reset: stock Devise::PasswordsController auto-signs
+  # in after a successful reset, bypassing the MFA-enforcing
+  # SuperAdmin::Devise::SessionsController#create entirely. Guarded to the
+  # :super_admin scope + SUPER_ADMIN_ENFORCE_MFA — see
+  # custom/app/controllers/custom/devise_overrides/super_admin_passwords_guard.rb
+  # and docs/fork/SUPER_ADMIN.md §4.3.
+  Devise::PasswordsController.prepend(
+    Custom::DeviseOverrides::SuperAdminPasswordsGuard
   )
 end

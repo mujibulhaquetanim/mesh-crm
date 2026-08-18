@@ -19,6 +19,7 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-08-18 — Adding a `custom/app/controllers/custom/super_admin/` overlay silently broke `Custom::SuperAdminBootstrap` (namespace shadowing)](./2026-08-18-custom-super-admin-namespace-shadows-superadmin-model.md)
 - [2026-08-17 — rspec `test` service pinned to the pre-rename `chatwoot-rails:development` tag — nothing rebuilds it, so it silently drifts](./2026-08-17-rspec-test-image-still-pinned-to-pre-rename-tag.md)
 - [2026-08-10 — A tenant could read the platform's webhook HMAC secret, and delete the ingest webhook permanently (every vendor is an account administrator)](./2026-08-10-tenant-could-read-and-delete-the-platform-ingest-webhook.md)
 - [2026-08-06 — `vite`/`sidekiq` die on `GemNotFound` every recreate: BUNDLE_PATH (`/gems`) is not on the shared bundle volume](./2026-08-06-vite-and-sidekiq-lose-gems-because-bundle-path-is-not-on-the-shared-volume.md)
