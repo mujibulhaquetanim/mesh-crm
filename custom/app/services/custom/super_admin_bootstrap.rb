@@ -48,7 +48,11 @@ module Custom
         return
       end
 
-      admin = SuperAdmin.find_or_initialize_by(email: email)
+      # ::SuperAdmin — qualified because Custom::SuperAdmin now also exists as a
+      # namespace (the super_admin MFA login overlay lives under
+      # custom/app/controllers/custom/super_admin/); unqualified `SuperAdmin`
+      # here would resolve to that namespace instead of the model.
+      admin = ::SuperAdmin.find_or_initialize_by(email: email)
 
       if admin.new_record?
         admin.name = presence(@env['SUPER_ADMIN_NAME']) || 'Platform Operator'
@@ -77,7 +81,7 @@ module Custom
       return unless truthy?(@env['SUPER_ADMIN_REMOVE_DEFAULT_SEED'])
 
       configured = presence(@env['SUPER_ADMIN_EMAIL'])
-      SuperAdmin.where(email: SEED_ADMIN_EMAIL).where.not(email: configured).find_each do |admin|
+      ::SuperAdmin.where(email: SEED_ADMIN_EMAIL).where.not(email: configured).find_each do |admin|
         admin.destroy!
         warn("Removed default seed Super Admin #{admin.email}")
       end
