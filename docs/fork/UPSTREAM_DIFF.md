@@ -48,7 +48,7 @@ pulling future upstream releases. It is generated from an actual
 | Fork overlay | `custom/**` | none (upstream has no `custom/`) | all real fork logic |
 | Fork docs | `docs/fork/**` | none | this documentation + error log |
 | Fork specs | `spec/custom/**` | none | fork test suite |
-| Extension points | ~15 OSS/ent files, **+1–2 lines each** | trivial (append-only at EOF) | canonical `prepend_mod_with` hooks |
+| Extension points | ~18 OSS/ent files, **+1–2 lines each** | trivial (append-only at EOF) | canonical `prepend_mod_with` hooks |
 | Bootstrap | `config/application.rb` | trivial (adjacent to enterprise lines) | eager-load + view path for `custom/` |
 | Frontend integration | ~13 OSS Vue/JS files | low (additive, isolated) | banner mount, quota UI, SSO redirect |
 | Branding | `config/locales/en.yml` + ~16 `en*.json`/Vue literals | low (value-only swaps) | "Chatwoot" → "Mesh CRM" display copy |
@@ -106,6 +106,26 @@ Everything here is net-new; pulling upstream can never conflict with it.
   - Super Admin bootstrap: `custom/app/services/custom/super_admin_bootstrap.rb`
     (env-driven first-boot operator + seed removal + baseline hardening; run via the
     net-new task `lib/tasks/fork/super_admin.rake` → `fork:super_admin:bootstrap`).
+  - Super Admin MFA enforcement: `custom/app/controllers/custom/super_admin/devise/sessions_controller.rb`
+    (`Custom::SuperAdmin::Devise::SessionsController`, flag-gated on
+    `SUPER_ADMIN_ENFORCE_MFA`, hooked onto the one upstream `prepend_mod_with`
+    line in §3) + `custom/app/services/custom/super_admin_mfa_enroll.rb`
+    (`Custom::SuperAdminMfaEnroll`, the headless enrollment/rotate service run
+    via `lib/tasks/fork/super_admin.rake` → `fork:super_admin:mfa_enroll`) +
+    `custom/app/views/super_admin/devise/sessions/new.html.erb` (view-path
+    shadow of the upstream sign-in form — `custom/app/views` already takes
+    precedence per §4 below — adding the `otp_attempt` field only when the flag
+    is on; upstream file unedited). See `docs/fork/SUPER_ADMIN.md` §4.3.
+    ⚠️ **Namespace collision, handled:** this overlay makes `Custom::SuperAdmin`
+    exist as a real (auto-vivified) namespace module, which shadows the
+    top-level `SuperAdmin` model for any *unqualified* `SuperAdmin` reference
+    lexically nested inside `module Custom; ... end` (compact `class
+    Custom::Foo` definitions are unaffected — see Ruby's `Module.nesting`).
+    `custom/app/services/custom/super_admin_bootstrap.rb`'s two `SuperAdmin`
+    references were fixed to `::SuperAdmin` for this reason (same for
+    `Mfa::ManagementService` → `::Mfa::ManagementService`, since `Custom::Mfa`
+    is an existing namespace too). Any future `Custom::*` file that references
+    `SuperAdmin` or `Mfa::*` unqualified must qualify it the same way.
   - Branding/MFA/mailers: `custom/app/services/custom/branding_setup.rb`,
     `custom/app/services/custom/mfa/management_service.rb`,
     `custom/app/mailers/custom/administrator_notifications/account_notification_mailer.rb`,
@@ -154,6 +174,7 @@ lowest-risk possible edits.
 | `enterprise/app/controllers/enterprise/api/v1/accounts_controller.rb` | `...AccountsController.prepend_mod_with(...)` | limits endpoint + agentic-AI |
 | `app/mailers/administrator_notifications/account_notification_mailer.rb` | `...AccountNotificationMailer.prepend_mod_with(...)` | branded subjects |
 | `app/services/mfa/management_service.rb` | `Mfa::ManagementService.prepend_mod_with(...)` | branded TOTP issuer |
+| `app/controllers/super_admin/devise/sessions_controller.rb` | `SuperAdmin::Devise::SessionsController.prepend_mod_with(...)` | `Custom::SuperAdmin::Devise::SessionsController` (flag-gated MFA enforcement, `SUPER_ADMIN_ENFORCE_MFA`; inert by default) |
 
 > Models that already had the hook upstream — `inbox.rb`, `account_user.rb`,
 > `custom_attribute_definition.rb`, `automation_rule.rb`, and

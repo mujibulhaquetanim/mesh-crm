@@ -117,13 +117,15 @@ protection below matters more than any per-tenant guard.
 | Brute-force throttle on login | ✅ built-in | `config/initializers/rack_attack.rb` — `5/5min` per IP, `5/15min` per email on `POST /super_admin/sign_in` |
 | No tenant path into the scope | ✅ by construction | provisioning only mints `User`s |
 | SSO-only lockdown covers it | ❌ **no** — separate scope | `Custom::DeviseOverrides::SessionsController` documents this explicitly |
-| MFA enforced on login | ❌ **no** — password only | `SuperAdmin::Devise::SessionsController#create` checks `valid_password?` only; it never verifies `otp_*`, even though the columns exist |
+| MFA enforced on login | ✅ behind `SUPER_ADMIN_ENFORCE_MFA` | `Custom::SuperAdmin::Devise::SessionsController` (fail-closed for un-enrolled operators; see §4.3) |
 | Default seed credential in prod | ⚠️ **must be prevented** | `db/seeds.rb` seeds `john@acme.inc / Password1!` as a `SuperAdmin` — dev only |
 | Network restriction on `/super_admin` | ⚠️ **deployment responsibility** | not enforced by the app |
 
 So out of the box the console is reachable at a **public password form**
-(`/super_admin/sign_in`) with throttling but **no MFA**. The password + network
-posture is therefore the real protection — see §5.
+(`/super_admin/sign_in`) with throttling. MFA is available — turn it on with
+`SUPER_ADMIN_ENFORCE_MFA=true` after enrolling every operator (§4.3); until then,
+or for operators you haven't enrolled, the password + network posture (§5)
+remains the real protection.
 
 ### 3.1 What changed — why it's more secure now
 
@@ -139,9 +141,12 @@ The fork's first-boot bootstrap (§4.1) replaces stock Chatwoot's insecure defau
 | Tenant → super-admin escalation | n/a | impossible by construction (provisioning only ever mints plain `User`s) |
 | Repeatability / audit | ad-hoc console commands | one idempotent task, covered by `spec/custom` |
 
-**Still unchanged from upstream — the deployment must close these:** there is **no
-MFA** on the `super_admin` login path and **no network restriction** by default. Those
-are §5 items 2 and 7; treat them as required for production.
+**Still unchanged from upstream — the deployment must close these:** MFA on the
+`super_admin` login path is **available but off by default**
+(`SUPER_ADMIN_ENFORCE_MFA`, §4.3) and there is **no network restriction** by
+default. Those are §5 items 2 and 7; treat both as required for production —
+enable the flag only after every operator is enrolled (§4.3), since an
+un-enrolled operator is locked out (by design — see §4.3's fail-closed note).
 
 ## 4. Managing Super Admins (operator runbook)
 
@@ -152,13 +157,16 @@ are §5 items 2 and 7; treat them as required for production.
    dashboard; your tenant SSO session does **not** grant it.
 2. Enter your **Super Admin** email + password (provisioned by the bootstrap §4.1, or
    created in §4.2). On success you land on the accounts list (`super_admin/accounts`).
+   If `SUPER_ADMIN_ENFORCE_MFA` is on and you're enrolled (§4.3), also enter your
+   authenticator code (or a backup code) in the same form — the sign-in is single-step.
 3. Background queues are at **`/monitoring/sidekiq`** (same session). Sign out at
    **`/super_admin/logout`**.
 
 There is **no** self-serve password-reset UI and no email flow for this scope — rotate
 via the bootstrap or the console (§4.1 / §4.2). If you are locked out, you need host /
-DB access to reset it. Because there is no MFA on this path, **do not expose
-`/super_admin` publicly** — reach it over VPN / an IP allowlist (§5).
+DB access to reset it. MFA is available but off by default (§4.3) — until you enable
+`SUPER_ADMIN_ENFORCE_MFA` for every operator, **do not expose `/super_admin`
+publicly** — reach it over VPN / an IP allowlist (§5).
 
 ### 4.1 First-boot bootstrap (recommended) — `fork:super_admin:bootstrap`
 
@@ -286,6 +294,68 @@ docker exec chatwoot-rails-1 bundle exec rails runner '
 the console (or the Rails console) if it may be exposed — the control plane's
 `CHATWOOT_PLATFORM_TOKEN` must be updated to match.
 
+### 4.3 MFA enforcement — `SUPER_ADMIN_ENFORCE_MFA`
+
+The `otp_*` columns on `users` exist but stock Chatwoot's Super Admin login never
+checks them. The fork closes this behind a flag, in the `custom/` overlay
+(upstream-merge-safe, same pattern as §4.1):
+
+- **Enforcement:** `custom/app/controllers/custom/super_admin/devise/sessions_controller.rb`
+  (`Custom::SuperAdmin::Devise::SessionsController`), hooked onto the one upstream
+  line `SuperAdmin::Devise::SessionsController.prepend_mod_with(...)`.
+- **Enrollment task (thin shim):** `lib/tasks/fork/super_admin.rake` →
+  `bundle exec rails fork:super_admin:mfa_enroll`.
+- **Enrollment service:** `custom/app/services/custom/super_admin_mfa_enroll.rb`
+  (`Custom::SuperAdminMfaEnroll`).
+- **Tests:** `spec/custom/controllers/super_admin/devise/sessions_controller_spec.rb`,
+  `spec/custom/services/super_admin_mfa_enroll_spec.rb`.
+
+**Behavior with `SUPER_ADMIN_ENFORCE_MFA` unset (default):** identical to before —
+password alone signs in. Nothing here changes until you opt in.
+
+**Behavior with `SUPER_ADMIN_ENFORCE_MFA=true`:**
+- An **enrolled** operator (see enrollment below) must supply password **+** a valid
+  TOTP code or a valid backup code (same `otp_attempt` field on the sign-in form —
+  it accepts either) to sign in.
+- An **un-enrolled** operator is **refused even with the correct password** — fail
+  closed, no exceptions. The rejection names this section's enrollment task so the
+  next step is obvious.
+- A wrong or missing code renders the exact same generic "Invalid credentials"
+  message as a bad password — the response never reveals whether an account has MFA
+  enrolled. rack_attack's login throttle (§1, `config/initializers/rack_attack.rb`)
+  applies unchanged, since it throttles the route, not this controller.
+- **There is no bypass.** If you enable the flag before enrolling an operator, that
+  operator is locked out of `/super_admin` until enrolled. Recovery is host access
+  (same story as a lost password — no email flow for this scope, see §4.0).
+
+**Enroll an operator** (must already exist — run `fork:super_admin:bootstrap`
+first if not):
+
+```bash
+docker exec \
+  -e SUPER_ADMIN_MFA_EMAIL='ops@yourcompany.com' \
+  chatwoot-rails-1 bundle exec rails fork:super_admin:mfa_enroll
+# → prints the otpauth:// provisioning URI (branded with INSTALLATION_NAME, or
+#   "Chatwoot" if unset) and 10 backup codes — ONCE. Scan the URI into an
+#   authenticator app and store the backup codes securely; neither is shown again.
+```
+
+Re-running against an already-enrolled operator is a **refused no-op** ("already has
+MFA enrolled — unchanged") unless you explicitly add `SUPER_ADMIN_MFA_ROTATE=true`,
+which issues a fresh secret + fresh backup codes (the old ones stop working) —
+mirrors the `SUPER_ADMIN_ROTATE_PASSWORD` idiom in §4.1.
+
+**Environment:**
+
+| Var | Effect |
+| --- | --- |
+| `SUPER_ADMIN_ENFORCE_MFA=true` | Turns on login enforcement (§ above). Off/unset = inert. |
+| `SUPER_ADMIN_MFA_EMAIL` | Operator email to enroll (required to do anything for the enrollment task). |
+| `SUPER_ADMIN_MFA_ROTATE=true` | Rotate an already-enrolled operator (new secret + new backup codes). |
+
+Only turn `SUPER_ADMIN_ENFORCE_MFA` on after every operator you rely on is enrolled —
+check with `SuperAdmin.pluck(:email, :otp_required_for_login)` on the host.
+
 ## 5. Hardening checklist (production)
 
 The app-level controls above are necessary but **not sufficient** — close these at
@@ -299,7 +369,8 @@ deploy time:
 2. **Network-restrict `/super_admin` and `/monitoring/sidekiq`.** Put them behind a
    VPN / IP allowlist / reverse-proxy auth (mTLS or SSO proxy). The operator console
    should **not** be reachable from the public internet — this is the primary
-   mitigation for the missing MFA and the public login form. Coordinate with
+   mitigation for the public login form, and the only mitigation for any deployment
+   that hasn't turned on `SUPER_ADMIN_ENFORCE_MFA` yet (item 7). Coordinate with
    `../../docs/operations/*` ingress hardening (meta-saas backlog 07).
 3. **Strong, unique credentials + a secrets manager.** No shared or reused passwords;
    one Super Admin per operator so access is attributable.
@@ -309,10 +380,11 @@ deploy time:
 6. **Treat installation-config and Platform-App changes as privileged.** Log and
    review them; a change to `ENABLE_SSO_ONLY_LOGIN`, `ENABLE_ACCOUNT_SIGNUP`, or a new
    Platform App is a security event.
-7. **(Enhancement) Enforce MFA for the scope.** The `otp_*` columns exist on `users`
-   but the fork's `SuperAdmin::Devise::SessionsController#create` does not check them.
-   Until that path enforces OTP, rely on network restriction (item 2). If you add MFA,
-   do it in the `custom/` overlay so it stays upstream-merge-safe.
+7. **(Available — enable it) Enforce MFA for the scope.** `SUPER_ADMIN_ENFORCE_MFA`
+   is built and off by default (§4.3). Enroll every operator with
+   `fork:super_admin:mfa_enroll`, then set `SUPER_ADMIN_ENFORCE_MFA=true`. Until you
+   do, rely on network restriction (item 2) — an un-enrolled operator is locked out
+   the moment the flag goes on, so enroll first.
 
 ## 6. Relationship to the rest of the platform
 
