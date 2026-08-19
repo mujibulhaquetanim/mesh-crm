@@ -1,0 +1,205 @@
+# Production-MODE mesh-crm against a LOCAL, throwaway database.
+#
+# The point of this file is to exercise the fork the way production runs it —
+# precompiled assets, no dev reloading, production caching and code paths —
+# WITHOUT pointing any of that at production data.
+#
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ ⚠ WHY THIS IS NOT `docker-compose.production.yaml`                        │
+# │                                                                          │
+# │ Two reasons, either of which is disqualifying:                           │
+# │                                                                          │
+# │ 1. That file pins `image: chatwoot/chatwoot:latest` — UPSTREAM's          │
+# │    published image. Running it tests upstream Chatwoot with NONE of the   │
+# │    `custom/` overlay: no super-admin MFA, no billable-seat quota fix, no  │
+# │    `platform_managed` webhook serialization. The exact opposite of        │
+# │    "test every feature".                                                  │
+# │                                                                          │
+# │ 2. `.env` points POSTGRES_HOST at Neon (`ep-twilight-pond-…`), i.e. the   │
+# │    LIVE mesh-crm database. Booting production mode against it would run   │
+# │    migrations on production, from a tree 20 commits and a 57-commit       │
+# │    upstream merge ahead of what is deployed.                              │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# ⚠ `environment:` BEATS `env_file:` in compose. That precedence is the whole
+# safety mechanism here: `.env` is still loaded for the app secrets that make a
+# production boot possible (SECRET_KEY_BASE, channel app ids), while every
+# variable that could reach production infrastructure or a real person is
+# overridden below. Do not reorder these into `env_file` or the override is lost.
+#
+# PORTS ARE SHIFTED so this runs BESIDE the agentic-str stack rather than
+# fighting it: that stack already holds 5432 (Postgres) and 6379 (Redis).
+#
+#   Rails     http://localhost:3000
+#   Postgres  localhost:5433
+#   Redis     localhost:6380
+#
+# BRING-UP (migrations are NOT run on boot — `docker/entrypoints/rails.sh` only
+# waits for Postgres, so nothing here can migrate anything by accident):
+#
+#   docker compose -f docker-compose.prod-local.yaml up -d postgres redis
+#   docker compose -f docker-compose.prod-local.yaml run --rm rails \
+#     bundle exec rails db:chatwoot_prepare
+#   docker compose -f docker-compose.prod-local.yaml up -d rails sidekiq
+#
+# TEARDOWN, including the throwaway data:
+#   docker compose -f docker-compose.prod-local.yaml down -v
+
+# ⚠ A DISTINCT COMPOSE PROJECT NAME, and it is not cosmetic.
+#
+# Compose derives the project name from the directory, so this file and
+# `docker-compose.yaml` both defaulted to `mesh-crm` — and container names are
+# scoped by project. Bringing this stack up therefore RECREATED the dev stack's
+# `mesh-crm-redis-1` against a different volume, silently repointing it. The
+# dev data survived (its `mesh-crm_redis` volume was untouched), but the
+# container was clobbered.
+#
+# With `name:` the two stacks live in separate namespaces — `mesh-crm-prodlocal-*`
+# here, `mesh-crm-*` there — and can run side by side without either one
+# reaching into the other.
+name: mesh-crm-prodlocal
+
+x-app: &app
+  image: mesh-crm:production
+  env_file: .env
+  environment: &app-env
+    # ── Production for real. `.env` says `development`, which is what disarms
+    # the fork's own production guards (same root cause as agentic-str's
+    # troubleshooting/273). Stated explicitly so this run is honestly production.
+    RAILS_ENV: production
+    NODE_ENV: production
+    INSTALLATION_ENV: docker
+    RAILS_LOG_TO_STDOUT: "true"
+
+    # ── The database. LOCAL container, never Neon. `POSTGRES_HOST` is the
+    # compose service name, so it resolves on the internal network and cannot
+    # reach the production host even if `.env` still names it.
+    POSTGRES_HOST: postgres
+    POSTGRES_PORT: "5432"
+    POSTGRES_DATABASE: mesh_crm_prodlocal
+    POSTGRES_USERNAME: chatwoot
+    POSTGRES_PASSWORD: chatwoot
+    # ⚠ SET to the local database, not cleared.
+    #
+    # `DATABASE_URL` takes precedence over the individual params above
+    # (`docker/entrypoints/helpers/pg_database_url.rb` relies on that), so one
+    # inherited from `.env` would silently win and send a production-mode boot
+    # back at Neon. The first attempt here set it to `""` to neutralise it —
+    # which FAILED: Rails treats an empty-but-PRESENT value as a URL config and
+    # aborts with "Database URL cannot be empty" rather than falling back.
+    #
+    # Naming the local database explicitly is both safer and unambiguous: there
+    # is exactly one place the connection can point, and it is this file.
+    # `?sslmode=disable` is REQUIRED on the URL, not just in `database.yml`.
+    # That file defaults `sslmode` to `disable`, but an explicit `DATABASE_URL`
+    # overrides the merge — so without it the connection inherits `require`
+    # (correct for Neon, fatal against a local container that speaks no SSL:
+    # "server does not support SSL, but SSL was required").
+    DATABASE_URL: postgres://chatwoot:chatwoot@postgres:5432/mesh_crm_prodlocal?sslmode=disable
+    POSTGRES_SSLMODE: disable
+
+    # ── Redis. Local container; the password and sentinel settings are cleared
+    # so a managed-Redis config in `.env` cannot leak in.
+    REDIS_URL: redis://redis:6379
+    REDIS_PASSWORD: ""
+    REDIS_SENTINELS: ""
+    REDIS_SENTINEL_MASTER_NAME: ""
+
+    # ── Where the app thinks it lives.
+    #
+    # The PUBLIC tunnel hostname, not `localhost:3000`. Meta's OAuth callback is
+    # made by Meta's servers, so a loopback address is unreachable to them and
+    # channel connection cannot complete — the reason this started as localhost
+    # was simply that no tunnel was running yet.
+    #
+    # ⚠ This hostname is the TUNNEL's, and the tunnel points at THIS stack
+    # (`~/.cloudflared/config.yml`: mesh-crm.<domain> -> http://localhost:3000).
+    # It is NOT production: production is the Neon-backed deployment, which this
+    # file deliberately never touches. Same hostname, different backend — so
+    # only ONE of the two may run behind the tunnel at a time.
+    FRONTEND_URL: https://mesh-crm.mujibulhaquetanim.dev
+
+    # ── Mail NEUTRALISED. A production-mode Chatwoot sends real invitations,
+    # password resets and conversation notifications. `.env` carries live SMTP
+    # credentials, and a test account created here would mail real people.
+    # Pointing SMTP at a dead loopback port makes delivery fail fast and
+    # locally, which is the correct behaviour for a test stack — the code path
+    # still runs, nothing leaves the machine.
+    SMTP_ADDRESS: localhost
+    SMTP_PORT: "1025"
+    SMTP_USERNAME: ""
+    SMTP_PASSWORD: ""
+    SMTP_AUTHENTICATION: ""
+    SMTP_ENABLE_STARTTLS_AUTO: "false"
+    MAILER_SENDER_EMAIL: "mesh-crm <no-reply@prod-local.invalid>"
+
+    # ── Files on disk in the container, not in a real bucket.
+    ACTIVE_STORAGE_SERVICE: local
+
+services:
+  postgres:
+    # The SAME image the agentic-str stack uses — pgvector, because Chatwoot's
+    # own migrations enable the extension.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: mesh_crm_prodlocal
+      POSTGRES_USER: chatwoot
+      POSTGRES_PASSWORD: chatwoot
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      # Named distinctly so it can NEVER be confused with `mesh-crm_*` (the dev
+      # stack) or `agentic-str_*` (the API stack). `down -v` on this file must
+      # only ever destroy this file's data.
+      - prodlocal_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatwoot -d mesh_crm_prodlocal"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - prodlocal_redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rails:
+    <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    # ⚠ NO `entrypoint:` override. The repo's `docker/entrypoints/rails.sh` runs
+    # `bundle install` on every boot — a local-dev convenience that is wrong
+    # against a production image built with `BUNDLE_WITHOUT=development:test`,
+    # where it is at best slow and at worst re-resolves the bundle the image was
+    # built with. The command below is the whole job.
+    command: ["bundle", "exec", "rails", "s", "-p", "3000", "-b", "0.0.0.0"]
+    volumes:
+      - prodlocal_storage:/app/storage
+
+  sidekiq:
+    <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["bundle", "exec", "sidekiq", "-C", "config/sidekiq.yml"]
+    volumes:
+      - prodlocal_storage:/app/storage
+
+volumes:
+  prodlocal_postgres:
+  prodlocal_redis:
+  prodlocal_storage:
