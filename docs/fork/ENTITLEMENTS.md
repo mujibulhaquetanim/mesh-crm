@@ -300,6 +300,92 @@ resources* (agent bots) still hit model-level guards.
 - Bypass-path specs: channel-created inbox at cap fails; `AgentBuilder` at cap
   fails; OAuth-created hook at cap fails.
 
+## Reply authority: nothing but the agent may message a customer
+
+The control plane's agent is the only reply authority on a platform-run account
+(agentic-str ADR-0006). That is why plan sync force-disables Chatwoot Captain
+(`captain_integration`, `captain_integration_v2`, `captain_v1_action_classifier`
+— all pushed as explicit `false`) and caps `agent_bots` at 0.
+
+`automation_rules` is deliberately **not** capped at 0: the useful half of
+automations is routing (`assign_agent`, `assign_team`, `add_label`,
+`remove_label`, `snooze_conversation`, `resolve_conversation`) and none of it
+competes with the agent. Two actions do — `send_message` and `send_attachment`,
+both of which build an outgoing, non-private message via
+`Messages::MessageBuilder` on the same `message_created` event the agent is
+answering. Without a guard a vendor could hand-build exactly the second reply
+path the Captain flags exist to prevent.
+
+- **Where:** `custom/app/models/custom/automation_rule.rb`
+  (`Custom::AutomationRule::CUSTOMER_FACING_ACTIONS`), resolved through the
+  upstream `AutomationRule.prepend_mod_with` hook.
+- **How:** a validation, refused at save with
+  `errors.automation_rule.customer_facing_action` — not a silent drop at
+  execution time. A rule that saves and then never fires is worse than one that
+  refuses to save.
+- **Scope:** only accounts where the platform has capped `agent_bots` at 0 in
+  `accounts.limits` — the control plane's own machine-readable statement that
+  nothing but its agent replies here. Stock Chatwoot accounts (no projected
+  limits) are untouched; that is also what keeps the upstream automation suite
+  green (unconditional, the validation reds 65 of its 116 examples).
+- **Only when `actions` is being written:** a rule created before this guard
+  existed stays renameable, deactivatable, and deletable — editing its actions is
+  what forces the fix. Consequence, accepted deliberately: such a rule keeps
+  firing until someone edits or deletes it. Sweeping them is an ops task (audit
+  `AutomationRule` rows for these two action names), not something to bury in a
+  validation.
+- **Still allowed:** `add_private_note` (internal only) and `send_email_to_team`
+  (internal recipients).
+- **Tests:** `spec/custom/models/custom/automation_rule_spec.rb`.
+- **Not covered:** the dashboard still *offers* "Send a message" in the
+  automation builder; the vendor gets the error on save rather than a hidden
+  option. Hiding it is a frontend change, deliberately not bundled here.
+
+### The second path: campaigns
+
+Blocking `send_message` on automations while leaving campaigns open would close
+the door and leave the window — a vendor wanting a second outbound path would
+simply build it here instead.
+
+A campaign is an automated customer-facing send that Chatwoot delivers on its
+own: `one_off` on a WhatsApp/SMS inbox is a scheduled bulk send to an audience,
+`ongoing` on a Website inbox fires at visitors matching `trigger_rules`. Neither
+passes through the platform agent.
+
+There is a second, independent reason to refuse them, and it is the one that
+bites in production: campaigns deliver through Chatwoot directly, so their
+messages never reach the platform's usage metering or audit trail (agentic-str
+CLAUDE.md §11, §12). That is untracked spend on a channel the tenant is billed
+for, and a customer-visible action with no audit row.
+
+- **Where:** `custom/app/models/custom/campaign.rb`. No upstream edit was
+  needed — `app/models/campaign.rb` already ends with
+  `Campaign.include_mod_with('Campaign')`, and `ChatwootApp.extensions` includes
+  `custom`.
+- **Scope:** identical to the automation guard, and *shared with it* —
+  `Custom::Concerns::PlatformReplyAuthority#platform_reserves_replies?`. The two
+  guards must agree: an account where automations may not reply but campaigns
+  may is not a policy, it is a bug, and two copies of the predicate are how that
+  happens. Upstream campaign suite stays green (79 examples).
+- **Only when the campaign is being ARMED**, which is broader than the
+  automation guard can be, because a campaign has an `enabled` flag:
+
+  | Refused | Allowed |
+  | --- | --- |
+  | creating one | disabling one |
+  | re-enabling a disabled one | renaming / editing its description |
+  | editing message, inbox, audience, trigger rules or schedule **while enabled** | editing those same fields once it is disabled |
+  | | deleting one |
+
+  Same accepted consequence as automations: a pre-existing *enabled* campaign
+  keeps running until someone disables or deletes it. Sweeping those is an ops
+  task — audit `Campaign.where(enabled: true)` on platform accounts.
+- **Tests:** `spec/custom/models/custom/campaign_spec.rb` (4 of its 9 examples
+  fail without the validation; the other 5 assert what stays permitted).
+- **Not covered:** as with automations, the dashboard still offers the Campaigns
+  UI; the vendor gets the error on save rather than a hidden nav item. Hiding it
+  is a frontend change, deliberately not bundled here.
+
 ## Agentic-AI limit (externally enforced, display-only)
 
 The agentic-AI (automated workflow) quota is **enforced by the external NestJS

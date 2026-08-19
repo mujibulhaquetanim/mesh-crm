@@ -76,6 +76,10 @@ en:
   errors:
     quota:
       exceeded: 'Account limit exceeded for %{resource} (%{current}/%{limit}). Upgrade your plan to add more.'
+    automation_rule:
+      customer_facing_action: 'cannot use %{actions} — replies to customers are sent by the AI agent for this account. Automations can assign, label, snooze, and resolve conversations, and can add private notes, but cannot message a customer.'
+    campaign:
+      reply_authority_reserved: 'Campaigns are disabled for this account — messages to customers are sent by the AI agent, and campaign sends would bypass its handling, your usage metering, and the audit trail. Existing campaigns can still be disabled or deleted.'
     sso_only_login: 'Direct sign-in is disabled. Please sign in through your account portal.'
     account:
       not_authorized: You are not authorized to access this account
