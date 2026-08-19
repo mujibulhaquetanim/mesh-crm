@@ -48,7 +48,10 @@
               <%# FORK: SUPER_ADMIN_ENFORCE_MFA (see custom overlay controller). %>
               <%# Inert by default — this block renders nothing unless the flag %>
               <%# is on, so the form is byte-identical to upstream otherwise. %>
-              <% if ActiveModel::Type::Boolean.new.cast(ENV.fetch('SUPER_ADMIN_ENFORCE_MFA', nil)) %>
+              <%# The flag is read through Custom::SuperAdminMfa.enforced?, the %>
+              <%# same predicate the enforcing controller uses, so this field %>
+              <%# can never appear (or vanish) while the controller disagrees. %>
+              <% if Custom::SuperAdminMfa.enforced? %>
                 <div class="mb-5">
                   <label for="super_admin_otp_attempt" class="flex justify-between text-sm font-medium leading-6 text-slate-900 dark:text-white">
                     Authenticator code (or backup code)

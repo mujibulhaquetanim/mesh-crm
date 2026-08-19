@@ -19,6 +19,10 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-08-20 — `super_admin_login/email` throttled every operator into ONE bucket: 5 failures locked out the whole console](./2026-08-20-super-admin-login-email-throttle-shared-bucket-lockout.md)
+- [2026-08-19 — `/installation/onboarding` stays an anonymous super-admin factory after `fork:super_admin:bootstrap`](./2026-08-19-installation-onboarding-wizard-left-open-after-fork-bootstrap.md)
+- [2026-08-19 (fixed 08-20) — `/super_admin/password/{new,edit}` 500: Devise's shared partial links to an `omniauth_authorize_path` helper this app never generates](./2026-08-19-super-admin-password-pages-500-on-devise-omniauth-helper.md)
+- [2026-08-19 — `bundle exec rspec` dies on `GemNotFound`: the `test` image is older than `Gemfile.lock` and nothing rebuilds it](./2026-08-19-rspec-image-stale-vs-gemfile-lock.md)
 - [2026-08-18 — Adding a `custom/app/controllers/custom/super_admin/` overlay silently broke `Custom::SuperAdminBootstrap` (namespace shadowing)](./2026-08-18-custom-super-admin-namespace-shadows-superadmin-model.md)
 - [2026-08-17 — rspec `test` service pinned to the pre-rename `chatwoot-rails:development` tag — nothing rebuilds it, so it silently drifts](./2026-08-17-rspec-test-image-still-pinned-to-pre-rename-tag.md)
 - [2026-08-10 — A tenant could read the platform's webhook HMAC secret, and delete the ingest webhook permanently (every vendor is an account administrator)](./2026-08-10-tenant-could-read-and-delete-the-platform-ingest-webhook.md)

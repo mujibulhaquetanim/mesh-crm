@@ -18,6 +18,9 @@
 #                                     (never the configured operator)
 #   SUPER_ADMIN_DISABLE_SIGNUP=true   turn off public self-signup
 #                                     (ENABLE_ACCOUNT_SIGNUP=false) — a safe default
+#
+# Also closes Chatwoot's first-run installation wizard whenever an operator
+# exists — unconditionally, with no env flag. See #close_installation_onboarding.
 module Custom
   class SuperAdminBootstrap
     SEED_ADMIN_EMAIL = 'john@acme.inc'.freeze
@@ -33,6 +36,7 @@ module Custom
 
     def run
       ensure_super_admin
+      close_installation_onboarding
       remove_default_seed_admin
       apply_security_config
     end
@@ -85,6 +89,45 @@ module Custom
         admin.destroy!
         warn("Removed default seed Super Admin #{admin.email}")
       end
+    end
+
+    # Close Chatwoot's first-run installation wizard once this instance HAS an
+    # operator.
+    #
+    # ⚠ This is a live unauthenticated privilege-escalation path, not cosmetics.
+    # While the `CHATWOOT_INSTALLATION_ONBOARDING` Redis key is set,
+    # `Installation::OnboardingController#create` is reachable by ANYONE with no
+    # session at all, and it calls `AccountBuilder.new(..., super_admin: true)` —
+    # i.e. an anonymous request mints a brand-new account AND a super admin on
+    # the operator console. Upstream is not wrong to leave it open: upstream's
+    # only way to get a first operator is that very form, and submitting it is
+    # what deletes the key (`#finish_onboarding`).
+    #
+    # The fork changed that premise. `rake fork:super_admin:bootstrap` is the
+    # documented way this instance gets its operator (docs/fork/SUPER_ADMIN.md
+    # §4.1), it runs before `rails server`, and it never touched the key. So the
+    # fork's own deploy path produced an instance that already had an operator
+    # and STILL served the anonymous wizard — the window upstream closes on
+    # first sign-up simply never closed here. Any deploy reachable from the
+    # internet before someone submits that form is exposed.
+    #
+    # Gated on an operator actually existing rather than on this run having
+    # created one: a re-run, or a bootstrap skipped for missing env, must still
+    # close the window. And when there is genuinely NO operator the key is left
+    # alone — with `SUPER_ADMIN_EMAIL` unset, the upstream wizard is the only
+    # remaining way in, and revoking it would brick a fresh install.
+    #
+    # No env flag on purpose: an unauthenticated super-admin factory is not a
+    # posture choice to opt into, and a flag here is one nobody sets.
+    def close_installation_onboarding
+      return unless ::SuperAdmin.exists?
+
+      key = ::Redis::Alfred::CHATWOOT_INSTALLATION_ONBOARDING
+      return if ::Redis::Alfred.get(key).blank?
+
+      ::Redis::Alfred.delete(key)
+      info('Closed the installation onboarding wizard (an operator exists); ' \
+           '/installation/onboarding no longer creates accounts or super admins.')
     end
 
     # Baseline hardening Chatwoot already supports: turn off public self-signup so

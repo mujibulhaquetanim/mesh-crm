@@ -106,4 +106,53 @@ RSpec.describe Custom::SuperAdminBootstrap do
       expect(InstallationConfig.find_by(name: 'ENABLE_ACCOUNT_SIGNUP').value).to eq('true')
     end
   end
+
+  # ⚠ Regression guard for an unauthenticated privilege-escalation window that
+  # the FORK opened by accident. `Installation::OnboardingController#create`
+  # takes no session and calls `AccountBuilder.new(..., super_admin: true)`;
+  # upstream tolerates that because submitting the form is also what closes it.
+  # The fork provisions its operator out-of-band via this service instead, so
+  # nothing ever closed the window. See #close_installation_onboarding.
+  describe 'closing the installation onboarding wizard' do
+    let(:key) { Redis::Alfred::CHATWOOT_INSTALLATION_ONBOARDING }
+
+    after { Redis::Alfred.delete(key) }
+
+    it 'closes the anonymous wizard once it has provisioned an operator' do
+      Redis::Alfred.set(key, true)
+
+      run('SUPER_ADMIN_EMAIL' => 'ops@company.com', 'SUPER_ADMIN_PASSWORD' => 'Str0ng!Pass1')
+
+      expect(Redis::Alfred.get(key)).to be_blank
+    end
+
+    it 'closes it on a later run even when that run provisions nothing' do
+      SuperAdmin.create!(name: 'Existing', email: 'existing@company.com', password: 'Str0ng!Pass1')
+      Redis::Alfred.set(key, true)
+
+      # No SUPER_ADMIN_* env at all: the operator predates this run, and the
+      # window must still be shut. Gating on "this run created one" would leave
+      # every already-provisioned instance exposed forever.
+      run({})
+
+      expect(Redis::Alfred.get(key)).to be_blank
+    end
+
+    it 'leaves the wizard OPEN when the instance has no operator at all' do
+      Redis::Alfred.set(key, true)
+
+      run({})
+
+      # Nothing can sign in yet, so the upstream wizard is the only remaining
+      # way in — revoking it here would brick a genuinely fresh install.
+      expect(Redis::Alfred.get(key)).to be_present
+    end
+
+    it 'is a no-op when the wizard was already closed' do
+      run('SUPER_ADMIN_EMAIL' => 'ops@company.com', 'SUPER_ADMIN_PASSWORD' => 'Str0ng!Pass1')
+
+      expect { run({}) }.not_to raise_error
+      expect(Redis::Alfred.get(key)).to be_blank
+    end
+  end
 end
