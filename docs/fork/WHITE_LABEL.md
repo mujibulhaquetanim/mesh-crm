@@ -93,9 +93,32 @@ instead of hand-editing sizes; verify output names match the originals.
 > `INSTALLATION_NAME` is unset in every env file, the hardcoded literals were
 > live vendor-visible copy rather than defaults, so the rename touched 23 code
 > files (44 strings). **The "Verified (Docker up)" line below predates the
-> rename** — it was confirmed against `Meta CRM`. The substitution mechanism is
-> unchanged and the rename was string-only, but the dev re-verification has not
-> been re-run. Do that on the next stack bring-up.
+> rename** — it was confirmed against `Meta CRM`.
+>
+> **Re-verified 2026-08-20 against `Mesh CRM`, on the prod-local stack**
+> (`docker-compose.prod-local.yaml`, RAILS_ENV=production, throwaway Postgres,
+> develop `06133e6e5b`). Measured, not assumed:
+>
+> - `Custom::BrandingSetup` applied 2 config changes; the served page then
+>   carries `INSTALLATION_NAME`/`BRAND_NAME` = `Mesh CRM` (was `Chatwoot`).
+> - Headless-browser click-through: `document.title` = `Mesh CRM`; login
+>   heading renders "Login to Mesh CRM". A bare `/app/login` visit never shows
+>   the form at all — `EXTERNAL_LOGIN_URL` bounces it to the platform
+>   dashboard (`?email=` skips the bounce, which is how the form was checked).
+> - MFA TOTP issuer: `otpauth://totp/Mesh%20CRM:…&issuer=Mesh%20CRM`.
+> - All three deletion/compliance emails render with `Mesh CRM` subjects and
+>   bodies; the only "Chatwoot" left was the test account's own name. NOTE for
+>   anyone rendering these by hand: invoke via `.with(account: a)` — the
+>   mailer's `ensure_current_account` RESETS `Current` from params, so a bare
+>   call dies on `Current.account` nil inside `settings_url`.
+> - `spec/mailers/administrator_notifications`: 27 examples, 0 failures.
+> - Locale audit: 0 `Chatwoot` display strings left in `en` locale JSONs
+>   (identifiers like `isOnChatwootCloud` and config keys remain, sanctioned).
+> - ⚠ **The screenshot still shows the Chatwoot LOGO on the login screen** —
+>   `LOGO`/`LOGO_THUMBNAIL` fall back to `/brand-assets/logo_thumbnail.svg`
+>   because Layer 3 (below) is still pending brand image files. The wordmark
+>   IS the word "chatwoot", so the first screen a vendor sees carries it until
+>   those assets exist. Same for the favicon.
 
 Done in code (brand = "Mesh CRM"):
 
