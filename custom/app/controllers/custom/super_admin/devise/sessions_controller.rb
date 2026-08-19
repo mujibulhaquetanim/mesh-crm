@@ -4,9 +4,11 @@
 # checks `valid_password?` only; the `otp_*` columns on `users` exist but were
 # never consulted on this path (SUPER_ADMIN.md §3 / §5 item 7).
 #
-# Behind SUPER_ADMIN_ENFORCE_MFA (same ENV-var + truthiness idiom as the sibling
-# bootstrap flags SUPER_ADMIN_REMOVE_DEFAULT_SEED / SUPER_ADMIN_DISABLE_SIGNUP —
-# see Custom::SuperAdminBootstrap#truthy?):
+# Behind SUPER_ADMIN_ENFORCE_MFA — read through Custom::SuperAdminMfa.enforced?,
+# the single reader shared with the password-reset guard and the sign-in form
+# (same ENV-var truthiness idiom as the sibling bootstrap flags
+# SUPER_ADMIN_REMOVE_DEFAULT_SEED / SUPER_ADMIN_DISABLE_SIGNUP — see
+# Custom::SuperAdminBootstrap#truthy?):
 #   - Enrolled operator: password + a valid TOTP (the `otp_attempt` sign-in form
 #     field) or a valid backup code are both required. Verification is
 #     delegated entirely to the upstream Mfa::AuthenticationService
@@ -40,8 +42,11 @@ module Custom::SuperAdmin::Devise::SessionsController
     true
   end
 
+  # Delegates to the single reader of the flag (Custom::SuperAdminMfa) so this
+  # controller, the password-reset guard, and the sign-in form can never drift
+  # apart on what "enforcement is on" means.
   def mfa_enforced?
-    ActiveModel::Type::Boolean.new.cast(ENV.fetch('SUPER_ADMIN_ENFORCE_MFA', nil))
+    Custom::SuperAdminMfa.enforced?
   end
 
   # Single sign-in-form field (`otp_attempt`) that accepts either a TOTP code

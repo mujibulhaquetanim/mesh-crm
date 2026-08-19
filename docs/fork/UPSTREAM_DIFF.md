@@ -28,7 +28,11 @@ pulling future upstream releases. It is generated from an actual
   4. a **dev-environment / tooling** file that ships no runtime behavior
      (Docker compose, devcontainer, `database.yml`, `AGENTS.md`) plus one
      enterprise spec whose setup the fork's model guard invalidated — all
-     catalogued in [§6](#6-dev-environment-tooling-and-spec-adjustments).
+     catalogued in [§6](#6-dev-environment-tooling-and-spec-adjustments), or
+  5. one of exactly **two** `config/` hardening edits on the `/super_admin`
+     scope, which have no injector to hook and so could not be made from the
+     overlay — catalogued in [§4.1](#41-the-two-super_admin-hardening-edits).
+     Neither changes a default tenant flow.
 - **All real behavior lives in the `custom/` overlay** (injected via
   `prepend_mod_with`, same mechanism as `enterprise/`), plus `docs/fork/` and
   `spec/custom/`. These are fork-owned trees that upstream never touches → **zero
@@ -46,11 +50,12 @@ pulling future upstream releases. It is generated from an actual
 | Layer | Location | Conflict risk on upstream pull | Nature |
 | --- | --- | --- | --- |
 | Fork overlay | `custom/**` | none (upstream has no `custom/`) | all real fork logic |
-| Shadowed views | `custom/app/views/super_admin/devise/sessions/new.html.erb` | **none, and that's the risk** — a full ERB copy under `custom/app/views` never produces a git conflict, so an upstream change to the *original* `app/views/super_admin/devise/sessions/new.html.erb` is silently never picked up; the shadow just keeps rendering its frozen copy. Re-diff this file against upstream's current version on every upstream pull — the pinned revision in the shadow's own header comment (`42f6621afb4e8a4ba5b6c121ca54bf46ac345fab`) is the diff anchor. | one marked `otp_attempt` field, flag-gated |
+| Shadowed views | `custom/app/views/super_admin/devise/sessions/new.html.erb`, `custom/app/views/devise/shared/_links.html.erb` (this one shadows the **devise gem's** copy, pinned at devise 4.9.4) | **none, and that's the risk** — a full ERB copy under `custom/app/views` never produces a git conflict, so an upstream change to the *original* `app/views/super_admin/devise/sessions/new.html.erb` is silently never picked up; the shadow just keeps rendering its frozen copy. Re-diff this file against upstream's current version on every upstream pull — the pinned revision in the shadow's own header comment (`42f6621afb4e8a4ba5b6c121ca54bf46ac345fab`) is the diff anchor. | one marked `otp_attempt` field, flag-gated |
 | Fork docs | `docs/fork/**` | none | this documentation + error log |
 | Fork specs | `spec/custom/**` | none | fork test suite |
 | Extension points | ~18 OSS/ent files, **+1–2 lines each** | trivial (append-only at EOF) | canonical `prepend_mod_with` hooks |
 | Bootstrap | `config/application.rb` | trivial (adjacent to enterprise lines) | eager-load + view path for `custom/` |
+| Super Admin hardening | `config/routes.rb` (1 line), `config/initializers/rack_attack.rb` (1 block) | **moderate** — both are high-churn upstream files, but each edit is a single contiguous, heavily commented hunk on the `/super_admin` scope only, so a conflict resolves by re-applying it ([§4.1](#41-the-two-super_admin-hardening-edits)) | `skip: [:registrations]` on the operator scope + a password-reset throttle |
 | Frontend integration | ~13 OSS Vue/JS files | low (additive, isolated) | banner mount, quota UI, SSO redirect |
 | Branding | `config/locales/en.yml` + ~16 `en*.json`/Vue literals | low (value-only swaps) | "Chatwoot" → "Mesh CRM" display copy |
 | Dev env & tooling | `docker-compose.yaml`, `.devcontainer/devcontainer.json`, `config/database.yml`, `AGENTS.md` (+ net-new `docker-compose.rspec.yaml`) | **moderate** — the largest conflict surface after `db/schema.rb`; upstream edits these occasionally | Docker-only Neon/Upstash dev stack; no runtime behavior ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
@@ -68,6 +73,8 @@ Everything here is net-new; pulling upstream can never conflict with it.
   - Model create-guards: `custom/app/models/custom/{inbox,team,webhook,label,agent_bot,automation_rule,account_user}.rb`,
     `custom/app/models/custom/integrations/hook.rb`,
     `custom/app/models/custom/concerns/custom_attribute_definition.rb`.
+    (`automation_rule.rb` carries a second, unrelated guard — reply authority;
+    see `ENTITLEMENTS.md` "Reply authority".)
   - Controller guards: `custom/app/controllers/custom/api/v1/accounts/*` (teams,
     webhooks, labels, automation_rules, custom_attribute_definitions, agent_bots,
     integrations/hooks).
@@ -141,11 +148,26 @@ Everything here is net-new; pulling upstream can never conflict with it.
     `custom/app/services/custom/mfa/management_service.rb`,
     `custom/app/mailers/custom/administrator_notifications/account_notification_mailer.rb`,
     `custom/app/views/administrator_notifications/**/*.liquid`.
+- **Super Admin MFA support files:**
+  - `custom/app/services/custom/super_admin_mfa.rb` (`Custom::SuperAdminMfa`) —
+    the single reader of `SUPER_ADMIN_ENFORCE_MFA`, shared by the sign-in check,
+    the password-reset guard, and the sign-in form's `otp_attempt` field so the
+    three cannot disagree about whether enforcement is on.
+  - `custom/app/services/custom/prepend_once.rb` (`Custom::PrependOnce`) —
+    name-matching, idempotent `Module#prepend` for the initializer below.
+  - `custom/app/views/devise/shared/_links.html.erb` — shadow of the **devise
+    gem's** partial (4.9.4), required by the `skip: [:registrations]` edit in
+    §4.1; see that section for why the two go together.
 - **`config/initializers/custom_prepends.rb`** (net-new, previously
   undocumented here) — the fourth undocumented overlay file this pass found.
   Two classes ship with no `prepend_mod_with` hook of their own, so this
   initializer prepends onto them directly, inside `to_prepare` (so the
-  prepend survives Zeitwerk reloading in development):
+  prepend survives Zeitwerk reloading in development) and through
+  `Custom::PrependOnce` (so that reloading does not STACK the overlay — a
+  reloadable module comes back as a new object with the same name on every
+  reload, which plain `prepend` cannot recognise, and the
+  `Devise::PasswordsController` target below is gem-owned and never reloaded,
+  so the copies would accumulate):
   - `Api::V1::Accounts::AssignableAgentsController` ← `Custom::Api::V1::Accounts::AssignableAgentsController`
     (assignee-picker scoping, §2 above).
   - `Devise::PasswordsController` ← `Custom::DeviseOverrides::SuperAdminPasswordsGuard`
@@ -217,6 +239,65 @@ config.paths['app/views'].unshift('custom/app/views')           # branded mailer
 This is the only multi-line OSS edit, and it sits directly beside the identical
 enterprise lines — the intended, documented seam (see `ARCHITECTURE.md`).
 
+### 4.1 The two `/super_admin` hardening edits
+
+Everything else in this fork reaches upstream through an injector (§3) or a new
+file (§2). These two could not: a route cannot be *removed* by appending another
+`routes.draw` block, and a rack_attack throttle belongs with its siblings or the
+next person to add one will not find it. Both are scoped to `/super_admin` and
+neither touches a tenant flow.
+
+| File | Edit | Why it can't live in `custom/` |
+| --- | --- | --- |
+| `config/routes.rb` | `skip: [:registrations]` on the one `devise_for :super_admins` line (+ a comment block) | `SuperAdmin < User` is `:registerable`, so `devise_for` routed `GET /super_admin/sign_up` and `POST /super_admin` unauthenticated, plus `DELETE /super_admin` (the signed-in operator's own account). Appended route files can only add routes, never remove one. |
+| `config/initializers/rack_attack.rb` | a `super_admin_password/{ip,email}` throttle pair, directly below the existing `super_admin_login/*` pair — **plus a correction inside upstream's own `super_admin_login/email` block** (see below) | Throttles are read as a list; splitting the `/super_admin` ones across two files is how the next one gets added twice or not at all. The correction is an edit to upstream's block itself, so it has nowhere else to go. |
+
+**The routes edit has a required companion, and it carries TWO changes.**
+`skip:` removes the *routes*, but `devise_mapping.registerable?` reads the
+**model's** devise modules, not the routes — so Devise's stock
+`devise/shared/_links` partial goes on linking to
+`new_super_admin_registration_path`, a helper the skip just deleted, and takes
+`GET /super_admin/password/new` and `/super_admin/password/edit` down with a
+`NoMethodError`. Those are the operator's documented recovery pages
+(`SUPER_ADMIN.md` §4.0). `custom/app/views/devise/shared/_links.html.erb` shadows
+that partial and keys the link off `devise_mapping.used_routes` instead — correct
+for every scope, not just this one.
+
+The same shadow also intersects the omniauth provider list with
+`Devise.omniauth_configs.keys`. That fixes a **separate, pre-existing** crash on
+the same two pages: `SuperAdmin < User` declares `:omniauthable` with providers,
+but Chatwoot registers them as `OmniAuth::Builder` middleware rather than through
+`Devise.setup`, so `omniauth_authorize_path` is never generated. Note this one
+could *not* be keyed off `used_routes` — that DOES include `:omniauth_callback`
+here, while the helper still does not exist. Covered by
+`spec/custom/routing/super_admin_registration_routes_spec.rb` (the signup verbs
+404) and `spec/custom/controllers/devise_overrides/super_admin_password_pages_spec.rb`
+(both recovery pages render 200).
+
+**The correction inside upstream's `super_admin_login/email`.** Upstream (#3830)
+keys that throttle on a flat `email` param, but Devise namespaces this scope's
+form fields — the form posts `super_admin[email]`. The lookup always missed and
+the block returned `''`, which rack_attack accepts as a key, so every sign-in
+attempt on the instance shared ONE bucket: any 5 failures, from any source,
+against any address, locked **every** operator out for 15 minutes. The fork reads
+`super_admin[email]` and returns nil when absent. This is not a tightening or a
+loosening of brute-force protection — `super_admin_login/ip` is untouched and
+still bounds attempts per IP; this restores the per-address axis upstream
+intended. Covered by `spec/custom/initializers/rack_attack_super_admin_login_spec.rb`
+(2 of its 4 examples fail on the upstream shape).
+
+⚠ **On upstream pull, this one is different from every other edit in this table:**
+it lives *inside* an upstream block rather than beside it, so a merge will not
+conflict if upstream rewrites that block — it will silently take upstream's
+version back, restoring the lockout vector with no diff to review. The spec is
+the only thing that catches it. Re-run `spec/custom/initializers/` after any
+upstream pull that touches rack_attack.
+
+**On upstream pull:** both files change often upstream, but each edit is a single
+contiguous hunk. Resolve a conflict by re-applying the hunk, then re-run
+`spec/custom/routing/` and `spec/custom/initializers/` — they fail loudly if
+either edit is lost in a merge.
+
 ## 5. Additive frontend & branding (no Ruby overlay exists for Vue/JS)
 
 Vue/JS cannot be injected via `prepend_mod_with`, so these are direct edits — but
@@ -247,7 +328,8 @@ all are **additive and inert by default**:
 - **`EXTERNAL_LOGIN_URL` exposure** — `app/controllers/dashboard_controller.rb`
   (+1): one additive key in `app_config`, defaulting to `''`.
 - **Branding copy** — `config/locales/en.yml` (new `errors.quota.*` /
-  `errors.sso_only_login` keys + "Chatwoot"→"Mesh CRM" value swaps) and ~16
+  `errors.automation_rule.*` / `errors.sso_only_login` keys + "Chatwoot"→"Mesh
+  CRM" value swaps) and ~16
   frontend files (`i18n/locale/en/*.json` for dashboard/survey/widget plus a few
   Vue/JS string literals in `Code.vue`, `Widget.vue`, `ArticleSearch/Header.vue`,
   `SenderNameExamplePreview.vue`, `Mfa*.vue`, `CampaignEmptyStateContent.js`,

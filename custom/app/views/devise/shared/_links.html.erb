@@ -1,0 +1,76 @@
+<%# Fork overlay — shadows Devise's own app/views/devise/shared/_links.html.erb %>
+<%# (gem devise 4.9.4). custom/app/views takes precedence over the gem's view %>
+<%# path (config/application.rb), so this file is a byte-for-byte copy of the %>
+<%# gem's partial with exactly two changes, each marked FORK below. %>
+<%# %>
+<%# Why: config/routes.rb passes `skip: [:registrations]` to the %>
+<%# `devise_for :super_admins` scope — the operator console has no self-signup %>
+<%# (see the comment there). But `devise_mapping.registerable?` reads the %>
+<%# MODEL's devise modules (Devise::Mapping#modules), not the routes, and %>
+<%# SuperAdmin < User *is* :registerable. So the upstream condition below still %>
+<%# fires for this scope and calls new_registration_path(resource_name) → %>
+<%# new_super_admin_registration_path, a helper that no longer exists, taking %>
+<%# down GET /super_admin/password/new and /super_admin/password/edit — the %>
+<%# operator's documented password-recovery pages (docs/fork/SUPER_ADMIN.md %>
+<%# §4.0) — with a NoMethodError. %>
+<%# %>
+<%# The fix keys the link off the ROUTE rather than the module, via %>
+<%# Devise::Mapping#used_routes (public API; it is `routes - skip`). That is %>
+<%# correct for every scope, not just this one: a mapping that still routes %>
+<%# registrations renders the link exactly as upstream does. %>
+<%# %>
+<%# Upstream-pull note: a full copy under custom/app/views never produces a git %>
+<%# conflict, so a change to the gem's partial is silently never picked up. %>
+<%# Re-diff this file against the devise gem's copy when devise is upgraded — %>
+<%# the pinned version above is the diff anchor. See docs/fork/UPSTREAM_DIFF.md §1. %>
+<%- if controller_name != 'sessions' %>
+  <%= link_to "Log in", new_session_path(resource_name) %><br />
+<% end %>
+
+<%# FORK: `&& devise_mapping.used_routes.include?(:registration)` added. %>
+<%- if devise_mapping.registerable? && devise_mapping.used_routes.include?(:registration) && controller_name != 'registrations' %>
+  <%= link_to "Sign up", new_registration_path(resource_name) %><br />
+<% end %>
+<%# END FORK %>
+
+<%- if devise_mapping.recoverable? && controller_name != 'passwords' && controller_name != 'registrations' %>
+  <%= link_to "Forgot your password?", new_password_path(resource_name) %><br />
+<% end %>
+
+<%- if devise_mapping.confirmable? && controller_name != 'confirmations' %>
+  <%= link_to "Didn't receive confirmation instructions?", new_confirmation_path(resource_name) %><br />
+<% end %>
+
+<%- if devise_mapping.lockable? && resource_class.unlock_strategy_enabled?(:email) && controller_name != 'unlocks' %>
+  <%= link_to "Didn't receive unlock instructions?", new_unlock_path(resource_name) %><br />
+<% end %>
+
+<%# FORK: `& Devise.omniauth_configs.keys` added to the provider list. %>
+<%# %>
+<%# Without it these pages return 500 in EVERY environment, and always have — %>
+<%# this is not fallout from the `skip: [:registrations]` change above. %>
+<%# `SuperAdmin < User` declares `:omniauthable` with %>
+<%# `omniauth_providers: [:google_oauth2, :saml]`, so `omniauthable?` is true %>
+<%# and the loop runs — but Chatwoot registers those providers as %>
+<%# `OmniAuth::Builder` MIDDLEWARE (config/initializers/omniauth.rb), never %>
+<%# through `Devise.setup`. So `Devise.omniauth_configs` is EMPTY, Devise %>
+<%# generated no omniauth routes, and `omniauth_authorize_path` does not %>
+<%# exist: NoMethodError, which takes down GET /super_admin/password/{new,edit} %>
+<%# — the operator's documented password-recovery pages (SUPER_ADMIN.md §4.0). %>
+<%# %>
+<%# Note this could NOT be keyed off `devise_mapping.used_routes` the way the %>
+<%# registration link above is: `used_routes` DOES include :omniauth_callback %>
+<%# here, so that predicate is true while the helper is still undefined. %>
+<%# `Devise.omniauth_configs` is what actually decides whether Devise built %>
+<%# the helper, so it is what the condition reads. %>
+<%# %>
+<%# This closes no attack surface and opens none: POST/PUT /super_admin/password %>
+<%# are already live and answer 302 without ever loading this partial, so the %>
+<%# 500 only ever blocked the legitimate operator's browser. An app that DOES %>
+<%# configure providers through Devise still renders exactly what upstream does. %>
+<%- if devise_mapping.omniauthable? %>
+  <%- (resource_class.omniauth_providers & Devise.omniauth_configs.keys).each do |provider| %>
+    <%= button_to "Sign in with #{OmniAuth::Utils.camelize(provider)}", omniauth_authorize_path(resource_name, provider), data: { turbo: false } %><br />
+  <% end %>
+<% end %>
+<%# END FORK %>

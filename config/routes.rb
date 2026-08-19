@@ -706,7 +706,28 @@ Rails.application.routes.draw do
   require 'sidekiq/web'
   require 'sidekiq/cron/web'
 
-  devise_for :super_admins, path: 'super_admin', controllers: { sessions: 'super_admin/devise/sessions' }
+  # FORK: `skip: [:registrations]`. `SuperAdmin < User` and User is
+  # `:registerable`, so `devise_for` hands the operator console a full
+  # self-signup surface it was never meant to have: GET /super_admin/sign_up +
+  # POST /super_admin (both unauthenticated), plus GET /super_admin/edit,
+  # PATCH/PUT /super_admin and DELETE /super_admin (authenticated — that last
+  # one deletes the signed-in operator's own account). Nothing links to any of
+  # them; operators come from `fork:super_admin:bootstrap` or the console, never
+  # from self-signup (docs/fork/SUPER_ADMIN.md §4.1–§4.2).
+  #
+  # Creating an operator through it was already refused — Devise permits only
+  # email/password in `sign_up_params` and `name` is validated present on User —
+  # so this closes a form that renders but cannot submit, not a live escalation.
+  # Which is the point: the day someone permits `name`, it becomes one.
+  #
+  # NB skipping the ROUTES does not make `devise_mapping.registerable?` false;
+  # that predicate reads the MODEL's devise modules. Devise's stock
+  # `devise/shared/_links` partial — still rendered by this scope's password and
+  # confirmation pages — would therefore keep linking to a
+  # `new_super_admin_registration_path` helper that no longer exists.
+  # `custom/app/views/devise/shared/_links.html.erb` shadows that partial to key
+  # the link off the route instead of the module.
+  devise_for :super_admins, path: 'super_admin', skip: [:registrations], controllers: { sessions: 'super_admin/devise/sessions' }
   devise_scope :super_admin do
     get 'super_admin/logout', to: 'super_admin/devise/sessions#destroy'
     namespace :super_admin do

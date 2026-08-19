@@ -42,16 +42,24 @@ module Custom::DeviseOverrides::SuperAdminPasswordsGuard
     false
   end
 
+  private
+
+  # Devise's own `after_resetting_password_path_for` is a protected internal
+  # hook — `Devise::PasswordsController#update` is its only caller, and it
+  # calls it on `self`. Declaring the override public would have widened that
+  # to callable-from-outside surface on every controller in the app that
+  # inherits from Devise's, for nothing: `super` still reaches upstream's
+  # definition from here, and self-calls ignore visibility.
   def after_resetting_password_path_for(resource)
     return super unless super_admin_mfa_reset_guard?
 
     new_session_path(resource_name)
   end
 
-  private
-
+  # Flag read via Custom::SuperAdminMfa.enforced? — the single reader shared
+  # with the sign-in enforcement and the sign-in form, so the three surfaces
+  # cannot drift apart on what "enforcement is on" means.
   def super_admin_mfa_reset_guard?
-    resource_name == :super_admin &&
-      ActiveModel::Type::Boolean.new.cast(ENV.fetch('SUPER_ADMIN_ENFORCE_MFA', nil))
+    resource_name == :super_admin && Custom::SuperAdminMfa.enforced?
   end
 end
