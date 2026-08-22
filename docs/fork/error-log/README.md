@@ -19,6 +19,7 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-08-20 — `docker compose build … | tail` reports exit 0 on a FAILED build (transient apk fetch blip stayed invisible)](./2026-08-20-docker-build-piped-to-tail-masks-a-failed-apk-step.md)
 - [2026-08-20 — `super_admin_login/email` throttled every operator into ONE bucket: 5 failures locked out the whole console](./2026-08-20-super-admin-login-email-throttle-shared-bucket-lockout.md)
 - [2026-08-19 — `/installation/onboarding` stays an anonymous super-admin factory after `fork:super_admin:bootstrap`](./2026-08-19-installation-onboarding-wizard-left-open-after-fork-bootstrap.md)
 - [2026-08-19 (fixed 08-20) — `/super_admin/password/{new,edit}` 500: Devise's shared partial links to an `omniauth_authorize_path` helper this app never generates](./2026-08-19-super-admin-password-pages-500-on-devise-omniauth-helper.md)

@@ -30,8 +30,8 @@ already documented there with a fix.
 | Requirement | Notes |
 | --- | --- |
 | Docker + Docker Compose v2 | Verified on Docker 29.6.2 / Compose v5.3.1 |
-| A Postgres database | **External.** Neon is what this fork uses. Not run by compose. |
-| ~10 GB disk | The dev image is ~5 GB; there are three tags. |
+| A Postgres database | **External.** Neon is what this fork uses. Not run by compose. (The production-mode stack in §7 brings its own throwaway local Postgres instead.) |
+| ~10 GB disk for images | Four tags — three dev (~5 GB, layers shared) + `mesh-crm:production` (~4 GB). Build cache grows on top; cap it with `docker builder prune --keep-storage=8GB`. |
 | ~25 min for the first build | Subsequent builds are cached and take seconds. |
 
 **No local Ruby, Node, or Postgres client is required or wanted.** Ruby is not
@@ -165,13 +165,23 @@ This only bites on a fresh clone. Once `mesh-crm:development` exists locally,
 the combined command works — which is why the older instruction in
 `IMPLEMENTATION_PLAN.md` looked fine for years.
 
+**Never pipe a build to `tail`/`head`/`grep` when its exit code is your
+success signal.** Without `pipefail`, `docker compose build base 2>&1 | tail -5`
+exits 0 even when the build failed — the 0 is `tail`'s. A masked base failure
+then surfaces one step later as the same `pull access denied` error above,
+which looks like the parallel-build trap but isn't. Redirect to a file instead
+(`> build.log 2>&1; echo $?`) and confirm the tag actually exists
+(`docker images | grep mesh-crm`) before building anything `FROM` it. See
+[error-log 2026-08-20](./error-log/2026-08-20-docker-build-piped-to-tail-masks-a-failed-apk-step.md).
+
 ### The images are fork-owned
 
 | Image | Built from |
 | --- | --- |
-| `mesh-crm:development` | `docker/Dockerfile` (base) |
+| `mesh-crm:development` | `docker/Dockerfile` (base) — dev args via compose |
 | `mesh-crm-rails:development` | `docker/dockerfiles/rails.Dockerfile` |
 | `mesh-crm-vite:development` | `docker/dockerfiles/vite.Dockerfile` |
+| `mesh-crm:production` | `docker/Dockerfile` with its **default** args — built by hand, see §7 |
 
 They are **not** upstream's published `chatwoot:*` images. The build context is
 this repo, so the `custom/` overlay is baked in. The two child Dockerfiles use
@@ -332,7 +342,11 @@ not being injected and quota enforcement is silently absent.
 | Password | `Password1!` |
 | Role | SuperAdmin (`/super_admin` console) |
 
-From `db/seeds.rb:28`. Change or delete this user before any deployment.
+From `db/seeds.rb:28`. Change or delete this user before any deployment —
+the bootstrap task can do the deletion for you
+(`SUPER_ADMIN_REMOVE_DEFAULT_SEED=true`, see §7). Note this seed is
+**dev-stack only**: the production-mode stack in §7 seeds no login at all,
+and you create its operator with `rails fork:super_admin:bootstrap`.
 
 Mailhog UI (every outbound dev email lands here): <http://localhost:8025>
 
@@ -391,7 +405,161 @@ touch. See
 
 ---
 
-## 7. Troubleshooting quick reference
+## 7. Production-mode local stack (`docker-compose.prod-local.yaml`)
+
+The dev stack above runs `RAILS_ENV=development` with live reloading. To
+exercise the fork **the way production runs it** — precompiled assets,
+production caching and code paths, real Sidekiq — use
+`docker-compose.prod-local.yaml`. It runs everything against a **local,
+throwaway database**, side by side with the dev stack and with the
+agentic-str stack (ports are shifted for exactly that reason).
+
+> ⚠ **"Side by side" does NOT include Rails: both this stack and the dev
+> stack serve on :3000, and both map Redis to host :6380 — only one may run
+> at a time.** That makes bringing this stack up a MODE SWITCH for the
+> machine: the agentic-str API's `CHATWOOT_BASE_URL` points at
+> `localhost:3000`, so while prod-local holds the port, every pre-existing
+> platform tenant's workspace features (SSO, usage writeback) fail against
+> the empty throwaway DB with `accounts/N 404`s. Stop **all** of this stack
+> (`docker compose -f docker-compose.prod-local.yaml stop`) before
+> restarting the dev one. Incident: `agentic-str/docs/troubleshooting/315`.
+
+**Do not reach for `docker-compose.production.yaml` instead.** That file pins
+upstream's published `chatwoot/chatwoot:latest` image (none of the `custom/`
+overlay — the opposite of testing this fork), and `.env` points `POSTGRES_HOST`
+at the live Neon database. The prod-local file's header comment spells out both
+disqualifiers.
+
+### What must be present
+
+- **`.env` must exist** — the stack loads it (`env_file: .env`) for the app
+  secrets a production boot needs (`SECRET_KEY_BASE`, channel app ids). Every
+  variable that could reach production infrastructure or a real person
+  (database, Redis, SMTP, storage) is overridden inline in the compose file,
+  and `environment:` beats `env_file:` — that precedence is the safety
+  mechanism, so never move those overrides into `env_file`.
+- **`mesh-crm:production` built from the tree you mean to test:**
+
+  ```sh
+  docker build -f docker/Dockerfile -t mesh-crm:production .
+  ```
+
+  No compose service builds this tag; you build it by hand. The Dockerfile's
+  default args are the production ones (`RAILS_ENV=production`,
+  `BUNDLE_WITHOUT=development:test`, assets precompiled). The image bakes the
+  commit it was built from into `/app/.git_sha` — that is how you prove later
+  which code is running.
+
+### Ports (shifted to coexist with the other stacks)
+
+| Service | Port |
+| --- | --- |
+| Rails | 3000 |
+| Postgres (throwaway, pgvector) | 5433 |
+| Redis | 6380 |
+
+### Bring-up
+
+Migrations are **not** run on boot here (the compose file overrides the
+entrypoint), so the order matters:
+
+```sh
+docker compose -f docker-compose.prod-local.yaml up -d postgres redis
+docker compose -f docker-compose.prod-local.yaml run --rm rails \
+  bundle exec rails db:chatwoot_prepare
+# create your operator BEFORE starting rails — see "Log in" below
+docker compose -f docker-compose.prod-local.yaml up -d rails sidekiq
+```
+
+After any image rebuild, `up -d --force-recreate` — the same
+containers-pin-image-IDs trap as §4.
+
+### Verify
+
+```sh
+# The app answers in production mode; both service checks green
+curl -s http://localhost:3000/api
+# {"version":"4.16.2","queue_services":"ok","data_services":"ok"}
+
+# The running image was built from the commit you think it was
+docker run --rm --entrypoint cat mesh-crm:production .git_sha
+git rev-parse HEAD    # must match
+
+# The fork overlay is live in production mode too
+docker compose -f docker-compose.prod-local.yaml exec -T rails \
+  bundle exec rails runner \
+  'puts Account.ancestors.map(&:to_s).grep(/Custom/).first(3)'
+```
+
+### Log in — the operator is created by you, never seeded
+
+Production mode ships **no login at all**. The dev seed (`john@acme.inc`,
+§5) is deliberately absent here, so a fresh prod-local instance has nothing
+to sign in with until you provision an operator. The console at
+<http://localhost:3000/super_admin/sign_in> accepts only an operator created
+through the fork's bootstrap task (`lib/tasks/fork/super_admin.rake` →
+`Custom::SuperAdminBootstrap`; full operator guide:
+[SUPER_ADMIN.md](./SUPER_ADMIN.md) §4):
+
+```sh
+# First boot — create the operator
+docker compose -f docker-compose.prod-local.yaml run --rm \
+  -e SUPER_ADMIN_EMAIL='ops@prod-local.invalid' \
+  -e SUPER_ADMIN_PASSWORD='<strong password>' \
+  rails bundle exec rails fork:super_admin:bootstrap
+```
+
+- The password must satisfy Chatwoot's policy (upper + lower + digit +
+  special). A weak one **fails loud** — the task raises rather than leaving
+  the instance operator-less silently.
+- Idempotent: re-running with the same email changes nothing and prints
+  `already present — unchanged`.
+- The same run also closes Chatwoot's first-run installation wizard once an
+  operator exists — that wizard is an unauthenticated super-admin factory,
+  see [error-log 2026-08-19](./error-log/2026-08-19-installation-onboarding-wizard-left-open-after-fork-bootstrap.md).
+
+**Forgot the password?** It cannot be read back — it exists only as a bcrypt
+hash in the DB, `.env` stores no `SUPER_ADMIN_*` values, and there is no
+email reset for this scope (prod-local mail is neutralised anyway). Rotate
+it instead:
+
+```sh
+docker compose -f docker-compose.prod-local.yaml run --rm \
+  -e SUPER_ADMIN_EMAIL='ops@prod-local.invalid' \
+  -e SUPER_ADMIN_PASSWORD='<new strong password>' \
+  -e SUPER_ADMIN_ROTATE_PASSWORD=true \
+  rails bundle exec rails fork:super_admin:bootstrap
+```
+
+Do **not** guess at the login form: the fork throttles `/super_admin`
+sign-in (5 failures trip a per-email *and* per-IP lockout). Rotating takes
+seconds; waiting out a lockout does not.
+
+MFA is enforced only when `SUPER_ADMIN_ENFORCE_MFA=true` is set (it is not,
+in this stack, by default). Enroll the operator *first* with
+`rails fork:super_admin:mfa_enroll` (env: `SUPER_ADMIN_MFA_EMAIL`) — it
+prints the provisioning URI and backup codes **once, to your terminal
+only** — then flip the flag. Details and rotation flags in
+[SUPER_ADMIN.md](./SUPER_ADMIN.md).
+
+### Notes
+
+- **Mail is neutralised by design** — SMTP points at a dead loopback port, so
+  invitation/reset mails fail fast and locally. Delivery errors in the logs are
+  expected, not a fault.
+- `FRONTEND_URL` in the file is the public **tunnel** hostname
+  (`~/.cloudflared/config.yml` routes it to `localhost:3000`). The tunnel can
+  front either this stack or the real deployment — never both — so check what
+  is behind it before sharing the URL. Browser testing against
+  `http://localhost:3000` needs no tunnel.
+- Teardown **including the throwaway data**:
+  `docker compose -f docker-compose.prod-local.yaml down -v`. The volumes are
+  namespaced `prodlocal_*` so this can never touch the dev or agentic-str
+  stacks' data.
+
+---
+
+## 8. Troubleshooting quick reference
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
@@ -409,10 +577,12 @@ touch. See
 | Changed Neon region/host in `.env` but the app still uses the old one | Compose injects env at container **creation** | `docker compose up -d --force-recreate` — `restart` will not pick it up. Verify with `docker compose exec rails printenv POSTGRES_HOST` |
 | First page load takes ~10s | Dev-mode on-demand asset compilation | Expected; subsequent loads are fast |
 | `db/schema.rb` shows as modified after a db task, with no migration added | Neon runs PG18; the committed schema was dumped from PG16, so index order and `WHERE` parens differ | `git checkout -- db/schema.rb`. Never commit this churn — see [error-log 2026-07-27](./error-log/2026-07-27-schema-rb-churn-from-neon-postgres-18.md) |
+| `pull access denied … mesh-crm:development` even though `base` was built first, and the build "succeeded" | The base build failed but was piped through `tail` — the pipeline's exit 0 was `tail`'s, not the build's | Rerun unpiped (`> build.log 2>&1; echo $?`), confirm the tag with `docker images`. See [error-log 2026-08-20](./error-log/2026-08-20-docker-build-piped-to-tail-masks-a-failed-apk-step.md) |
+| Prod-local rails aborts: `server does not support SSL, but SSL was required` | A `DATABASE_URL` without `?sslmode=disable` overrides `database.yml`'s local default | Keep the compose file's explicit `DATABASE_URL` (it ends `?sslmode=disable`); never let one leak in from `.env` |
 
 ---
 
-## 8. Fork ground rules
+## 9. Fork ground rules
 
 Before changing code, read [ARCHITECTURE.md](./ARCHITECTURE.md) and the ground
 rules in [README.md](./README.md). The short version:
