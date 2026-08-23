@@ -123,17 +123,9 @@ configured no secret.
 
 ## Verification
 
-⚠️ **The specs below were written but NOT executed** — they are unrun as of this
-entry. There is no local Ruby (by design, `DEV_SETUP.md` §0), and the rspec
-stack's `test` service is pinned to the image `mesh-crm-rails:development`,
-which does not exist on this machine; building it was out of scope for this
-change (the prod-local stack was up and had to stay untouched). Run them before
-trusting the fix:
+**Ran, green, and proved against a negative control.**
 
 ```sh
-docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml \
-  run --rm test bundle exec rails db:create db:schema:load
-
 docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test \
   bundle exec rspec \
     spec/custom/controllers/webhooks/whatsapp_controller_spec.rb \
@@ -143,25 +135,52 @@ docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test
     spec/controllers/api/v1/accounts/inboxes_controller_spec.rb
 ```
 
-Expected: **21** fork examples green (7 + 9 + 5), and the two upstream files
-green (the second is the regression surface for the redaction — it asserts
+→ **138 examples, 0 failures** (21 fork examples: 7 + 9 + 5, plus both upstream
+files — the second being the regression surface for the redaction: it asserts
 `provider_config` is present for an admin, absent for an agent, and that a
 `provider_config` PATCH round-trips).
 
-**Negative control to run at the same time** (the 2026-08-10 lesson: a guard
-that has never failed may be guarding nothing) — comment out the
-`Custom::PrependOnce.call(Webhooks::WhatsappController, …)` entry and re-run:
-exactly **2** examples must fail, both in the "when the installation has a
-global WhatsApp app secret" context ("rejects an unsigned POST…", "rejects a
-POST signed with the wrong secret"). The other 5 in that file assert *unchanged*
-behaviour — a signed POST is accepted, 360dialog stays unsigned, the handshake
-stays open, the legacy no-secret installation is untouched — and pass either
-way, which is what makes the 2 meaningful. Then restore it and revert the
-jbuilder line to `try(:provider_config)`: **3** of the 5 redaction examples must
-fail (the two that assert *unchanged* behaviour — non-secret keys still render,
-an agent still gets none — pass either way).
+Read off the summary line, not an exit code: this command is often piped, and
+`| tail` has reported exit 0 over a failed run in this repo before
+([2026-08-20](./2026-08-20-docker-build-piped-to-tail-masks-a-failed-apk-step.md)).
 
-What *was* executed, in a throwaway container off the existing
+**Negative control — both guards were broken on purpose and the right examples
+failed** (the 2026-08-10 lesson: a guard that has never failed may be guarding
+nothing):
+
+| Guard removed | Result |
+| --- | --- |
+| `Custom::PrependOnce.call(Webhooks::WhatsappController, …)` commented out | **18 examples, 2 failures** — exactly "rejects an unsigned POST to a manual-source cloud inbox" and "rejects a POST signed with the wrong secret". The other 16, including all 11 upstream examples, stayed green: a signed POST is still accepted, 360dialog stays unsigned, the handshake stays open, the legacy no-secret installation is untouched. |
+| jbuilder line reverted to `try(:provider_config)` | **5 examples, 3 failures** — both index assertions plus the show one. The two that assert *unchanged* behaviour (non-secret keys still render, an agent still gets none) passed either way. |
+
+Both guards were restored with `git checkout --` and the full battery re-run:
+**138 examples, 0 failures** again.
+
+### The gate caught a vacuous pass — worth its own note
+
+The first run of this battery had **2 failures**, both on the INDEX path of the
+redaction spec, with `payload` nil. Diagnosed against the real response rather
+than by inspection: the index answered `{"payload":[]}`.
+
+Cause was the spec, not the serializer. `whatsapp_channel` was a lazy `let`, and
+the index examples first referenced it *after* the `get` — so the inbox did not
+exist when the request ran. Two examples blew up on nil, and a third — "leaks no
+secret VALUE anywhere in the response body" — **passed against an empty body**.
+A green example that asserted nothing.
+
+Proven, not assumed: a throwaway diagnostic spec dumped both orderings. Lazy →
+`{"payload":[]}`. Eager → the row is present, `provider_config` renders as
+`{source, api_key, phone_number_id, business_account_id, webhook_verify_token}`,
+and `body.include?('meta-app-secret-value')` is **false**. So index and show
+share the partial and both redact; there was no second serializer hole.
+
+Fixed by making the fixture `let!` and routing every index lookup through a
+helper that asserts the row is present before returning it, so this cannot come
+back by another route. The negative control above is the receipt: with the
+jbuilder reverted, that third example now **fails**, where before the fix it
+would have passed.
+
+Also executed, before the test stack existed, in throwaway containers off the
 `mesh-crm:development` image (`--network none`, repo mounted read-only, no
 compose project, nothing running touched):
 
