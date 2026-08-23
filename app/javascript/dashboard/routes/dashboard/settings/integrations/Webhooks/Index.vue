@@ -2,8 +2,8 @@
 import { mapGetters } from 'vuex';
 import { useAlert } from 'dashboard/composables';
 import { useBranding } from 'shared/composables/useBranding';
+import { picoSearch } from '@chatwoot/pico-search';
 import { useQuota } from 'dashboard/composables/useQuota';
-import { picoSearch } from '@scmmishra/pico-search';
 import NextButton from 'dashboard/components-next/button/Button.vue';
 import { BaseTable } from 'dashboard/components-next/table';
 import { FEATURE_FLAGS } from 'dashboard/featureFlags';

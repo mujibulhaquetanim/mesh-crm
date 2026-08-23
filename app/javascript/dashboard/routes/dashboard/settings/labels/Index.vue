@@ -3,8 +3,8 @@ import { useAlert } from 'dashboard/composables';
 import { computed, onBeforeMount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useStoreGetters, useStore } from 'dashboard/composables/store';
+import { picoSearch } from '@chatwoot/pico-search';
 import { useQuota } from 'dashboard/composables/useQuota';
-import { picoSearch } from '@scmmishra/pico-search';
 
 import AddLabel from './AddLabel.vue';
 import EditLabel from './EditLabel.vue';
