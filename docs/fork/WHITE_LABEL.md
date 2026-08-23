@@ -152,9 +152,49 @@ Verified (Docker up): `Custom::BrandingSetup` applied on dev; `spec/custom` +
 config unset, so upstream specs pass); MFA issuer and deletion emails render
 "Mesh CRM" on dev; eslint 0 errors.
 
+## Status — Layer 3 assets shipped (2026-08-23)
+
+The owner reported the Chatwoot logo still rendering on the login screen after
+account creation / SSO redirect — exactly the gap flagged in the "Mesh CRM"
+re-verification above. Root cause confirmed: `LOGO`, `LOGO_DARK`, and
+`LOGO_THUMBNAIL` (installation-config defaults, seeding the DB rows the Vue app
+reads via `GlobalConfig`) all point at `/brand-assets/*.svg`, and those SVG
+files still contained the literal Chatwoot wordmark/mark — no config or code
+change was missing, only the asset content.
+
+Fix (Layer 3, in place, same paths, `fix/login-brand-placeholder` branch):
+
+- `public/brand-assets/logo.svg`, `logo_dark.svg` — replaced the "chatwoot"
+  wordmark with a "Mesh CRM" placeholder wordmark (violet circle "M" mark +
+  text; `logo_dark.svg` uses white wordmark text for dark backgrounds). Same
+  `viewBox`/aspect (`0 0 2559 581`) as the originals, so no layout shift.
+- `public/brand-assets/logo_thumbnail.svg` — replaced the Chatwoot "C" mark
+  with the "M" mark only, same `viewBox` (`0 0 16 16`).
+- `public/favicon-{16,32,96,512}x{16,32,96,512}.png` (self-square, e.g.
+  `favicon-16x16.png`), `favicon-badge-{16,32,96}x{16,32,96}.png`,
+  `android-icon-*.png`, `apple-icon-*.png`, `ms-icon-*.png` — regenerated from
+  the new mark via `convert` (ImageMagick's built-in MSVG renderer; no
+  `rsvg-convert` binary on this box, but the render was verified visually),
+  one PNG per original filename/dimension — no code or `installation_config.yml`
+  changes needed since the config only stores the path, not the image.
+- `public/manifest.json` — `name`/`short_name` "Chatwoot" → "Mesh CRM";
+  `background_color`/`theme_color` swapped to the new mark's violet
+  (`#5B4FE9`, was Chatwoot's `#2781F6`). `icons[].src` paths unchanged (same
+  filenames, new pixels).
+- `public/browserconfig.xml` — untouched; it only references `ms-icon-*.png`
+  by path, which now render the new mark.
+
+Not touched (out of scope for this pass, or upstream files this fork avoids
+editing without an overlay): `app/views/layouts/vueapp.html.erb`'s inline
+`#2781F6` `theme-color`/`msapplication-TileColor` meta tags (Chatwoot's blue,
+not the logo — leaving unless the owner also wants browser-chrome color
+rebranded); `public/apple-touch-icon.png` / `apple-touch-icon-precomposed.png`
+(both already 0-byte placeholders upstream, not Chatwoot-branded, unreferenced
+by any `<link>` tag). Visual proof (the actual rendered login screen) needs the
+controller's post-rebuild e2e screenshot — not run from this pass.
+
 Deferred:
 
-- **Layer 3 assets** (logos, favicons, PWA manifest) — pending brand image files.
 - Owner-set values: `BRAND_URL`, `WIDGET_BRAND_URL`, `TERMS_URL`, `PRIVACY_URL`
   (via `BrandingSetup` ENV) and the `hello@chatwoot.com` support address in the
   inactivity-deletion email (left until the fork's support contact is known).

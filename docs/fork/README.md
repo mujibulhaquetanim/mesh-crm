@@ -29,8 +29,8 @@ Chatwoot API or webhook contract**.
 - **White-label** — copy, installation configs, mailers, and MFA issuer branded
   ("Mesh CRM"); inert until configured.
 
-**Not-code remaining:** brand asset files (logos/favicons/PWA), deploy-time
-branding config values, and the manual cross-repo AI-loop run. See
+**Not-code remaining:** deploy-time branding config values (`BRAND_URL`,
+`TERMS_URL`, etc.) and the manual cross-repo AI-loop run. See
 [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the phase-by-phase status
 and [UPSTREAM_DIFF.md](./UPSTREAM_DIFF.md) for the exact change inventory.
 

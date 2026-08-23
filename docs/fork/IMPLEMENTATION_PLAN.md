@@ -19,17 +19,14 @@ Phased so every phase leaves the app releasable. All commands run in Docker
 | 4 — Provisioning glue | ✅ Done (`PROVISIONING.md`, `CHATWOOT_ENGINE_INTEGRATION.md`) |
 | 5 — AI loop verification | ◑ Contract specs done; manual cross-repo run outstanding |
 | 6 — UI adaptation | ✅ Done (`useQuota`, banner, at-cap disabling, quota i18n) |
-| 7 — Branding pass | ◑ Copy/config/mailers/MFA done; assets + deploy config deferred |
+| 7 — Branding pass | ◑ Copy/config/mailers/MFA/Layer-3 assets done; deploy config deferred |
 
 ### Remaining work (not code)
 
-1. **Brand assets (Phase 7, Layer 3)** — supply logo / logo-dark / thumbnail /
-   favicon / PWA manifest image files, then point the installation configs at
-   them. Blocked on brand image files, not on code.
-2. **Deploy-time config (Phase 7)** — set `BRAND_URL`, `WIDGET_BRAND_URL`,
+1. **Deploy-time config (Phase 7)** — set `BRAND_URL`, `WIDGET_BRAND_URL`,
    `TERMS_URL`, `PRIVACY_URL`, `MAILER_SENDER_EMAIL`, and the support-contact
    address at deploy. Values only; `BrandingSetup` already consumes them.
-3. **Manual AI-loop run (Phase 5)** — exercise incoming → webhook → orchestrator
+2. **Manual AI-loop run (Phase 5)** — exercise incoming → webhook → orchestrator
    stub → API reply end-to-end (exactly one reply, no self-trigger). Requires the
    external orchestrator repo; the Chatwoot-side contract is already spec-covered
    by `spec/custom/contracts/ai_reply_loop_contract_spec.rb`.
@@ -131,11 +128,12 @@ This repo's responsibility is only that contracts hold:
   on 402 everywhere.
 - `docker compose run --rm vite pnpm eslint` and `pnpm test` green.
 
-## Phase 7 — Branding pass ◑ Copy/config done; assets + deploy config deferred
+## Phase 7 — Branding pass ◑ Copy/config/assets done; deploy config deferred
 
 Per WHITE_LABEL.md, then full build + click-through. Copy, installation configs,
-mailers, and MFA issuer are done; the deferred items (Layer-3 brand assets and
-deploy-time config values) are listed under **Remaining work** above and in
+mailers, MFA issuer, and Layer-3 brand assets (logo/logo-dark/thumbnail/favicon
+set/PWA manifest, `fix/login-brand-placeholder`) are done; the remaining
+deploy-time config values are listed under **Remaining work** above and in
 WHITE_LABEL.md's "Deferred" section.
 
 ## Merge checklist (all must pass)
