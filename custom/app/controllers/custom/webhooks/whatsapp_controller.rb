@@ -32,6 +32,14 @@
 #     EVERY whatsapp_cloud webhook POST, manual source included
 #   installation without one                      → upstream behavior, byte for
 #     byte (no regression for a stock deployment that never set the config)
+#   every rejection                               → a structured warn line, which
+#     upstream does not emit at all (see `#log_meta_signature_rejection`)
+#
+# Note this is inert until someone seeds `WHATSAPP_APP_SECRET` as an
+# InstallationConfig (Super Admin → app configs, `whatsapp_embedded` group).
+# It is not read from `.env.example`, and merging this PR closes nothing on its
+# own — seeding it is the rollout step, and the rejection log above is what
+# makes that step observable.
 #
 # The rule is "if we can verify, we must" rather than a new list of conditions,
 # so a future upstream that teaches `#meta_app_secrets` about another secret
@@ -72,6 +80,43 @@ module Custom::Webhooks::WhatsappController
     # the per-channel entries are necessarily empty here (super would have
     # returned true), which leaves the installation-wide WHATSAPP_APP_SECRET.
     meta_app_secrets.any?(&:present?)
+  end
+
+  # Rejections must be observable. Upstream refuses with a bare
+  # `head :unauthorized` — no log line, no metric, nothing — and this change is
+  # the one in the fork that can take live tenants offline: the moment an
+  # operator seeds `WHATSAPP_APP_SECRET`, any cloud inbox whose deliveries are
+  # signed by a DIFFERENT Meta app starts 401ing, inbound customer messages stop
+  # arriving, and Meta eventually disables the subscription — with zero
+  # server-side evidence of why. A fail-closed path with no instrumentation is
+  # how a rollout becomes an outage nobody can attribute.
+  #
+  # So: warn on the way out, then let upstream's refusal stand unchanged.
+  def valid_meta_signature?
+    return true if super
+
+    log_meta_signature_rejection
+    false
+  end
+
+  # Enough to identify the tenant and to tell the two failure modes apart —
+  # "Meta sent nothing to check" vs "we had N candidates and none matched" —
+  # and nothing more. Never the secrets, never the signature, never the body.
+  def log_meta_signature_rejection
+    Rails.logger.warn(
+      '[WHATSAPP_WEBHOOK_SIGNATURE] rejected ' \
+      "phone_number=#{params[:phone_number].to_s.inspect} " \
+      "channel_id=#{whatsapp_channel&.id || 'none'} " \
+      "account_id=#{whatsapp_channel&.account_id || 'none'} " \
+      "candidates=#{meta_app_secrets.count(&:present?)} " \
+      "signature_header=#{meta_signature_header_present? ? 'present' : 'missing'}"
+    )
+  end
+
+  # `inspect` above is not decoration: `phone_number` is a URL path segment, so
+  # a percent-encoded newline would otherwise let a caller forge log lines.
+  def meta_signature_header_present?
+    request.headers[MetaTokenVerifyConcern::META_SIGNATURE_HEADER].present?
   end
 
   # Memoized because this override consults the secret list once per request in

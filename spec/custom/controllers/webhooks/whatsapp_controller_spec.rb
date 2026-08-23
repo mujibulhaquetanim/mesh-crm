@@ -78,6 +78,61 @@ RSpec.describe 'Webhooks::WhatsappController (fork signature enforcement)', type
       expect(Webhooks::WhatsappEventsJob).to have_received(:perform_later)
     end
 
+    it "accepts a POST signed with the channel's OWN app secret" do
+      # THE ESCAPE HATCH, and the only mitigation for the one way this change
+      # can take a live tenant offline: an inbox whose deliveries are signed by
+      # a DIFFERENT Meta app than the installation-wide one. `#meta_app_secrets`
+      # offers both and `#valid_meta_signature?` accepts any match, so giving
+      # that channel its own `app_secret` restores it — no global change, no
+      # other tenant affected.
+      #
+      # Nothing else pins this path: upstream's per-channel example runs with
+      # the global secret UNSET, and the no-global context below asserts a 401.
+      # A refactor that made `meta_app_secrets` return only the global when one
+      # exists would 401 every different-app tenant with the suite still green.
+      channel_secret = 'this-channels-own-meta-app-secret'
+      manual_cloud_channel.update!(
+        provider_config: manual_cloud_channel.provider_config.merge('app_secret' => channel_secret)
+      )
+
+      post_webhook(manual_cloud_channel, body, signature: signature_for(body, channel_secret))
+
+      expect(response).to have_http_status(:success)
+      expect(Webhooks::WhatsappEventsJob).to have_received(:perform_later)
+    end
+
+    it 'logs a structured warning when it rejects, naming the tenant but no secret' do
+      # Upstream refuses with a bare `head :unauthorized`. Without this line,
+      # seeding WHATSAPP_APP_SECRET can silently stop a tenant's inbound
+      # messages with no server-side evidence of why.
+      allow(Rails.logger).to receive(:warn)
+
+      post_webhook(manual_cloud_channel, body)
+
+      expect(response).to have_http_status(:unauthorized)
+      expect(Rails.logger).to have_received(:warn).with(
+        a_string_including(
+          '[WHATSAPP_WEBHOOK_SIGNATURE] rejected',
+          "channel_id=#{manual_cloud_channel.id}",
+          "account_id=#{manual_cloud_channel.account_id}",
+          'candidates=1',
+          'signature_header=missing'
+        )
+      ).at_least(:once)
+      # The whole point of a log line on a secret-checking path is that it must
+      # never carry the secret it checked.
+      expect(Rails.logger).not_to have_received(:warn).with(a_string_including(global_app_secret))
+    end
+
+    it 'logs nothing when the signature is valid' do
+      allow(Rails.logger).to receive(:warn)
+
+      post_webhook(manual_cloud_channel, body, signature: signature_for(body, global_app_secret))
+
+      expect(response).to have_http_status(:success)
+      expect(Rails.logger).not_to have_received(:warn).with(a_string_including('[WHATSAPP_WEBHOOK_SIGNATURE]'))
+    end
+
     it 'still accepts an unsigned POST for a 360dialog inbox' do
       # provider 'default' is not a Meta webhook at all — it never carries
       # X-Hub-Signature-256, so requiring one would take the inbox offline.
