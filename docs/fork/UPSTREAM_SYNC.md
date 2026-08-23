@@ -19,9 +19,13 @@ in a way the original version of this doc said was impossible (§3b), the
 **2026-07-28** one which merged clean but broke the stack twice on the way back
 up (§3c, §6a), the **2026-08-11** one — 25 commits / 1238 files carrying the
 **Rails 7.2.3.1 upgrade**, which introduced conflict class C and needs a
-`bundle install` before the stack will boot at all (§3d) — and the
+`bundle install` before the stack will boot at all (§3d) — the
 **2026-08-18** one, 57 commits / 285 files with **zero** conflicts, where the
-candidate set was *measured before merging* instead of guessed (§3e).
+candidate set was *measured before merging* instead of guessed (§3e) — and the
+**2026-08-23** one, 31 commits / 167 files (Chatwoot 4.17.0), whose four
+conflicts all landed inside the measured candidate set and where §3b's
+"take upstream's branding" reflex would have re-branded a string backwards
+because upstream had **not** actually converted it (§3f).
 
 > **This doc has twice asserted a closed set of conflict classes and been wrong
 > both times** (§2). When you hit something that fits none of the three, resolve
@@ -591,6 +595,156 @@ enterprise agents controllers (including the fork-adjusted cap-exact spec from
 | fork `develop` before merge | `12d8d7b890` |
 | `upstream/develop` tip merged in | `89a933f763` |
 | the merge commit | `305988f383` |
+
+---
+
+## 3f. Class C inside an import block, and a class-B line upstream did *not* convert (2026-08-23)
+
+Sync of **31 upstream commits** (`89a933f763` → `6154aebcfe`) — 167 files,
++5 227/−296, carrying **Chatwoot 4.17.0** (`VERSION_CW` 4.16.2 → 4.17.0).
+
+### The measured candidate set, and what each one did
+
+The §3e `comm -12` recipe was run **before** merging and printed **12** names.
+Four of them conflicted — every conflict was inside the predicted set, which is
+the whole point of measuring first:
+
+| Candidate | Outcome |
+|---|---|
+| `db/schema.rb` | **auto-merged.** The fork's version line still read the merge-base's `2026_08_07_133000`; only upstream moved it (→ `2026_08_14_000000`). One-sided — the §3c case again, not class A. |
+| `.env.example` | auto-merged — upstream appended 12 lines below the fork's rewritten header |
+| `config/locales/en.yml` | auto-merged — upstream's 14 new lines land nowhere near the fork's `errors.quota` / `errors.campaign` / `sso_only_login` keys or its four `Mesh CRM` strings |
+| `config/routes.rb` | auto-merged — upstream's 7 added lines are nowhere near the fork's `devise_for :super_admins, skip: [:registrations]` |
+| `.../en/auditLogs.json` | **CONFLICT — class B ∧ C** (below) |
+| `.../settings/automation/Index.vue` | **CONFLICT — class C** (below) |
+| `.../settings/integrations/Webhooks/Index.vue` | **CONFLICT — class C** |
+| `.../settings/labels/Index.vue` | **CONFLICT — class C** |
+| `.../settings/{agentBots,agents,attributes,teams}/Index.vue` | auto-merged — same two edits as the three above, but far enough apart that git resolved them |
+
+### The three `.vue` conflicts: class C in an *import block*
+
+Upstream #15514 migrated the search package — `@scmmishra/pico-search` →
+`@chatwoot/pico-search` — in seven settings pages. The fork's quota work had
+added an `import { useQuota } …` line 1-3 lines above that import in the same
+seven files. Neither side edited the other's line; the insertions are simply
+adjacent, so git flagged three of the seven:
+
+```
+<<<<<<< HEAD
+import { useQuota } from 'dashboard/composables/useQuota';
+import { picoSearch } from '@scmmishra/pico-search';
+=======
+import { picoSearch } from '@chatwoot/pico-search';
+>>>>>>> upstream/develop
+```
+
+**Resolution: keep both, fork's line last** (§3d), with upstream's *renamed*
+package:
+
+```js
+import { picoSearch } from '@chatwoot/pico-search';
+import { useQuota } from 'dashboard/composables/useQuota';
+```
+
+> Taking the fork's side wholesale here would have **broken the build**, not just
+> lost a feature: `package.json` no longer lists `@scmmishra/pico-search` at all
+> (`0.6.0` → `@chatwoot/pico-search@0.6.2`). After resolving, `grep -rn
+> '@scmmishra' app/ package.json` must return **nothing** — those three conflict
+> blocks were the last three references in the tree.
+
+### `auditLogs.json`: class B where §3b's rule does **not** apply
+
+Upstream #15479 (audit log filtering/search/sort) added 30 keys immediately after
+`SIDEBAR_TXT` — the line the white-label pass had de-branded — so one conflict
+hunk carried both a competing line and 30 additive ones:
+
+```
+<<<<<<< HEAD
+    "SIDEBAR_TXT": "… in a Mesh CRM System. </p>",     ← fork: de-branded
+=======
+    "SIDEBAR_TXT": "… in a Chatwoot System. </p>",     ← upstream: still hardcoded
+    "COUNT": "{n} event | {n} events",                  ← + 29 more new keys
+    …
+>>>>>>> upstream/develop
+```
+
+**Resolution: fork's `SIDEBAR_TXT`, plus every one of upstream's new keys.**
+
+§3b says "when upstream implements the branding properly, take upstream's side" —
+**that rule is conditional on upstream actually converting the string**, and here
+it did not. This is a raw locale JSON value; `replaceInstallationName()` is not
+in play, so upstream's side is still the literal `Chatwoot`. Taking it would have
+re-branded a vendor-visible string backwards. Read the *content* of upstream's
+line before applying §3b, not just the fact that it moved.
+
+(The second de-branded string in the same file, `LIST.DESC`, auto-merged with the
+fork's `Mesh CRM` intact — upstream did not touch it.)
+
+### Verification (§3b/§3e checks, all run before commit)
+
+| Check | Result |
+| --- | --- |
+| Conflict markers in tree | none (the hits in this file are its own examples) |
+| Conflicts ⊆ measured candidate set | **yes** — 4 of the 12 predicted names |
+| Overlay overlap (`custom/*.rb` vs upstream's 167 files) | **0** |
+| Overlay OSS targets present, `prepend_mod_with`/`include_mod_with` hook intact | 28/28 (25 via `prepend_mod_with`, `campaign.rb` via `include_mod_with`, `assignable_agents_controller.rb` + `webhooks/whatsapp_controller.rb` via `custom_prepends.rb`) |
+| Fork's WhatsApp overlays still bind | upstream touched **no** whatsapp/inbox Ruby file this cycle; `meta_signature_verification_required?`, `valid_meta_signature?`, `meta_app_secrets` all still present at their `super` targets |
+| `@scmmishra/pico-search` references left | 0 |
+| Branding counts, en locale JSON (sorted diff) | 20 before → 20 after, **byte-identical file list** |
+| `platform_managed` in `schema.rb` | 3 |
+| `custom/` · `spec/custom/` · `docs/fork/` | 49 · 31 · 62 files |
+| Fork markers after auto-merge | `routes.rb skip: [:registrations]` ✓ · `en.yml` quota/campaign/SSO keys ✓ · `.env.example` fork header ✓ · `public/brand-assets` + `manifest.json` untouched by upstream ✓ |
+
+**Schema load on a freshly recreated tmpfs test DB** (`rm -sf postgres-test`
+first, then `sh -c "bundle install && bundle exec rails db:create db:schema:load"`):
+
+→ **100 tables**, `max(schema_migrations.version) = 20260814000000` (identical to
+the merged version line), **4** hairtrigger triggers retained. Both new upstream
+migrations confirmed *in the database*: `conversations.ai_assignee_type` and
+`index_audits_on_associated_and_created_at` — alongside all three fork
+`platform_managed` columns (`agent_bots`, `webhooks`, `account_users`).
+
+**Suites** (baselines captured on `develop` *before* the merge, per §3e):
+
+| Suite | Before | After |
+| --- | --- | --- |
+| `spec/custom` | 248 examples, **0 failures** | 248 examples, **0 failures** |
+| Upstream specs over the fork's overlay surfaces (11 files) | 243 examples, **0 failures** | 243 examples, **0 failures** |
+
+Overlay surfaces exercised: `webhook_controller` + OSS/enterprise `webhook`
+models, platform `account_users` / `accounts` / `users` controllers, OSS and
+enterprise agents controllers, plus `webhooks/whatsapp_controller`,
+`channel/whatsapp` and `inboxes_controller` (the WhatsApp signature-enforcement
+surface). Upstream changed **none** of those 11 spec files this cycle, so the
+identical counts are a real before/after comparison, not a coincidence. Scope
+note: the **full** upstream suite was not run.
+
+> **`spec/custom` is now 248 examples, not 124.** §3e's numbers are from
+> 2026-08-18; the WhatsApp signature/redaction battery landed since. Always
+> measure your own baseline — do not carry a count forward from this doc.
+
+### What the merge means for the running containers
+
+- **New migrations: 2.** `20260811000000_add_ai_assignee_type_to_conversations`
+  and `20260814000000_add_associated_created_at_index_to_audits`. The second is
+  `disable_ddl_transaction!` + `algorithm: :concurrently`.
+- **Frontend changed: yes.** 74 files under `app/javascript/`, plus
+  `package.json` / `pnpm-lock.yaml` (the pico-search rename). The bundle hash
+  *will* move — §6a's "restart rails" case, and any image rebuild must re-run
+  `pnpm install`, not just reuse `node_modules`.
+- **`Gemfile.lock` moved** (mail 2.9.1 #15522, aws-sdk-cloudwatch +
+  speedshop-cloudwatch #15461): 380 → 382 gems. Every `run --rm test` needs the
+  `sh -c "bundle install && …"` one-liner (error-log
+  `2026-07-20-rspec-test-service-loses-installed-gems`).
+
+**Audit trail:**
+
+| Thing | SHA |
+|---|---|
+| merge-base | `89a933f763` |
+| fork `develop` before merge | `8da291e267` |
+| `upstream/develop` tip merged in | `6154aebcfe` |
+| the merge commit | `2ac3723c76` |
 
 ---
 
