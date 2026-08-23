@@ -99,7 +99,14 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
       expect(response).to have_http_status(:success)
     end
 
-    it 'skips signature validation for manual whatsapp cloud channels without an app secret' do
+    # Fork: the setup had to narrow. Upstream ran this with WHATSAPP_APP_SECRET
+    # set, because a manual-source cloud channel skipped verification either
+    # way. This fork requires a signature as soon as the INSTALLATION has a
+    # secret to verify with, so the "no app secret" this example pins now means
+    # no channel secret AND no global one (`nil` unsets the variable). The
+    # fork's own coverage of both halves lives in
+    # spec/custom/controllers/webhooks/whatsapp_controller_spec.rb.
+    it 'skips signature validation for manual whatsapp cloud channels without any app secret' do
       channel.update!(
         provider_config: channel.provider_config.except('app_secret', 'app_secret_key', 'api_secret', 'client_secret', 'source')
       )
@@ -120,7 +127,7 @@ RSpec.describe 'Webhooks::WhatsappController', type: :request do
         }]
       }.to_json
 
-      post_unsigned_whatsapp_webhook("/webhooks/whatsapp/#{channel.phone_number}", channel_body)
+      post_unsigned_whatsapp_webhook("/webhooks/whatsapp/#{channel.phone_number}", channel_body, env: { WHATSAPP_APP_SECRET: nil })
 
       expect(response).to have_http_status(:success)
     end

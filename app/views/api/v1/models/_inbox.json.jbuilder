@@ -134,7 +134,11 @@ json.bot_name resource.channel.try(:bot_name) if resource.telegram?
 if resource.whatsapp?
   message_templates = resource.channel.try(:message_templates)
   json.message_templates message_templates.is_a?(Array) ? message_templates : []
-  json.provider_config resource.channel.try(:provider_config) if Current.account_user&.administrator?
+  # Fork: Meta app secrets are redacted from this payload — they are Meta-app-wide
+  # credentials that would let one tenant admin forge webhook signatures for every
+  # other tenant on the same app. `api_key` (the channel's own send token) is kept.
+  # See custom/app/models/custom/channel/whatsapp.rb.
+  json.provider_config resource.channel.try(:provider_config_without_app_secrets) if Current.account_user&.administrator?
   if Current.account_user&.administrator? &&
      ChatwootApp.chatwoot_cloud? &&
      (resource.channel.try(:provider_config) || {}).to_h['source'] == 'embedded_signup'

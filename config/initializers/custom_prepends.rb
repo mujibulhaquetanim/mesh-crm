@@ -24,6 +24,18 @@ Rails.application.config.to_prepare do
     Custom::Api::V1::Accounts::AssignableAgentsController
   )
 
+  # WhatsApp webhook signature: upstream only REQUIRES `X-Hub-Signature-256`
+  # when the channel itself carries an app secret (or came from embedded
+  # signup), which leaves the manual-source whatsapp_cloud inboxes this
+  # platform provisions accepting unsigned POSTs. The overlay requires a
+  # signature whenever the installation has a secret to verify with. See
+  # custom/app/controllers/custom/webhooks/whatsapp_controller.rb.
+  # (Reloadable target; the guard is a no-op here, same as the entry above.)
+  Custom::PrependOnce.call(
+    Webhooks::WhatsappController,
+    Custom::Webhooks::WhatsappController
+  )
+
   # Super Admin password reset: stock Devise::PasswordsController auto-signs
   # in after a successful reset, bypassing the MFA-enforcing
   # SuperAdmin::Devise::SessionsController#create entirely. Guarded to the

@@ -17,7 +17,7 @@ pulling future upstream releases. It is generated from an actual
 **Status: held.** Concretely:
 
 - **No core logic was rewritten.** Every touch to an OSS (`app/`, `lib/`,
-  `config/`) or `enterprise/` file is one of exactly four kinds:
+  `config/`) or `enterprise/` file is one of exactly six kinds:
   1. a canonical `Foo.prepend_mod_with('Foo')` / `include_mod_with` extension
      point at the bottom of a file (the *standard Chatwoot pattern*, a no-op on
      upstream),
@@ -26,13 +26,19 @@ pulling future upstream releases. It is generated from an actual
      config, `false` prop, or a brand string that only differs when the
      installation is branded), or
   4. a **dev-environment / tooling** file that ships no runtime behavior
-     (Docker compose, devcontainer, `database.yml`, `AGENTS.md`) plus one
-     enterprise spec whose setup the fork's model guard invalidated — all
+     (Docker compose, devcontainer, `database.yml`, `AGENTS.md`) plus two
+     upstream specs whose setups the fork's guards invalidated — all
      catalogued in [§6](#6-dev-environment-tooling-and-spec-adjustments), or
   5. one of exactly **two** `config/` hardening edits on the `/super_admin`
      scope, which have no injector to hook and so could not be made from the
      overlay — catalogued in [§4.1](#41-the-two-super_admin-hardening-edits).
-     Neither changes a default tenant flow.
+     Neither changes a default tenant flow, or
+  6. **one** `app/views` line that swaps a serializer call site onto a
+     redacting reader — the single fork edit that REMOVES fields from an
+     existing response shape, and the one place the "additive only" rule below
+     is knowingly broken because the fields are shared credentials. Views
+     cannot be prepended, so there was no overlay to make it from —
+     catalogued in [§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder).
 - **All real behavior lives in the `custom/` overlay** (injected via
   `prepend_mod_with`, same mechanism as `enterprise/`), plus `docs/fork/` and
   `spec/custom/`. These are fork-owned trees that upstream never touches → **zero
@@ -43,7 +49,9 @@ pulling future upstream releases. It is generated from an actual
   `spec/custom` suites staying green).
 - **Frozen public contracts** (route paths, webhook event names/payloads,
   `X-Chatwoot-*` headers, existing JSON keys) are only ever **extended
-  additively** — never renamed or removed.
+  additively** — never renamed or removed. **One deliberate exception**, and it
+  is a security one: four secret-shaped keys are removed from the WhatsApp
+  inbox payload ([§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder)).
 
 ## 1. Change map at a glance
 
@@ -55,11 +63,12 @@ pulling future upstream releases. It is generated from an actual
 | Fork specs | `spec/custom/**` | none | fork test suite |
 | Extension points | ~18 OSS/ent files, **+1–2 lines each** | trivial (append-only at EOF) | canonical `prepend_mod_with` hooks |
 | Bootstrap | `config/application.rb` | trivial (adjacent to enterprise lines) | eager-load + view path for `custom/` |
+| Meta webhook / secret hardening | `app/views/api/v1/models/_inbox.json.jbuilder` (1 line + comment) | **moderate** — high-churn upstream file, but the edit is one call site; re-apply it if a merge takes upstream's version ([§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder)) | redacting reader for `provider_config`; the signature half needs no OSS edit at all |
 | Super Admin hardening | `config/routes.rb` (1 line), `config/initializers/rack_attack.rb` (1 block) | **moderate** — both are high-churn upstream files, but each edit is a single contiguous, heavily commented hunk on the `/super_admin` scope only, so a conflict resolves by re-applying it ([§4.1](#41-the-two-super_admin-hardening-edits)) | `skip: [:registrations]` on the operator scope + a password-reset throttle |
 | Frontend integration | ~13 OSS Vue/JS files | low (additive, isolated) | banner mount, quota UI, SSO redirect |
 | Branding | `config/locales/en.yml` + ~16 `en*.json`/Vue literals | low (value-only swaps) | "Chatwoot" → "Mesh CRM" display copy |
 | Dev env & tooling | `docker-compose.yaml`, `.devcontainer/devcontainer.json`, `config/database.yml`, `AGENTS.md` (+ net-new `docker-compose.rspec.yaml`) | **moderate** — the largest conflict surface after `db/schema.rb`; upstream edits these occasionally | Docker-only Neon/Upstash dev stack; no runtime behavior ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
-| Spec adjustment | `spec/enterprise/.../accounts/agents_controller_spec.rb` | low | setup made cap-exact — the fork's model guard forbids over-cap creation ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
+| Spec adjustments | `spec/enterprise/.../accounts/agents_controller_spec.rb`, `spec/controllers/webhooks/whatsapp_controller_spec.rb` | low | setups narrowed to what the fork's guards allow — cap-exact agent creation, and an unsigned-webhook pin that now also unsets the global app secret ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
 
 ## 2. Fork-owned trees (new files — no upstream overlap)
 
@@ -144,6 +153,69 @@ Everything here is net-new; pulling upstream can never conflict with it.
     leading `::`; files written in the *compact* form are safe from this
     class of bug by construction. Full writeup:
     `docs/fork/error-log/2026-08-18-custom-super-admin-namespace-shadows-superadmin-model.md`.
+  - **Meta webhook signature enforcement:**
+    `custom/app/controllers/custom/webhooks/whatsapp_controller.rb`
+    (`Custom::Webhooks::WhatsappController`) — makes `X-Hub-Signature-256`
+    mandatory on **every** `whatsapp_cloud` webhook POST as soon as the
+    installation has a secret to verify with. Upstream (#14280) only requires a
+    signature when the CHANNEL can prove one (an app secret in
+    `provider_config`, or `source == 'embedded_signup'`), so the manual-source
+    cloud inboxes this platform provisions accepted **unsigned** POSTs —
+    anyone who knew a tenant's phone number could inject inbound customer
+    messages that the AI agent then answered. The installation-wide
+    `WHATSAPP_APP_SECRET` was already a verification *candidate* in upstream's
+    `#meta_app_secrets`; it simply never made verification mandatory. The
+    override is phrased as "if we can verify, we must" (`meta_app_secrets.any?`)
+    rather than a new list of conditions, so a future upstream that teaches
+    `#meta_app_secrets` another secret source is covered automatically.
+    Untouched on purpose: the `GET` verify handshake (Meta signs deliveries,
+    not subscriptions) and 360dialog (`provider == 'default'`) inboxes, which
+    carry no signature at all — so what this closes is the **`whatsapp_cloud`**
+    hole specifically; an unsigned 360dialog inbox stays as upstream leaves it.
+    The overlay also adds the **rejection log upstream has none of**: upstream
+    refuses with a bare `head :unauthorized`, and this is the one fork change
+    that can take live tenants offline, so `#log_meta_signature_rejection`
+    warns `[WHATSAPP_WEBHOOK_SIGNATURE] rejected phone_number=… channel_id=…
+    account_id=… candidates=N signature_header=present|missing` — enough to
+    identify the tenant and tell "Meta sent nothing" from "N candidates, none
+    matched", and never the secret, the signature, or the body. (The phone
+    number is `inspect`ed: it is a URL path segment, so a percent-encoded
+    newline would otherwise forge log lines.)
+    ⚠️ **Inert until `WHATSAPP_APP_SECRET` is seeded** as an InstallationConfig
+    — see the rollout paragraph in
+    [§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder). Merging closes
+    nothing on its own.
+    Wired from `config/initializers/custom_prepends.rb`
+    below — **no upstream edit**. Specs:
+    `spec/custom/controllers/webhooks/whatsapp_controller_spec.rb`.
+  - **Meta app secret redaction:** `custom/app/models/custom/channel/whatsapp.rb`
+    (`Custom::Channel::Whatsapp`) — `#provider_config_without_app_secrets` drops
+    exactly `MetaTokenVerifyConcern::CHANNEL_APP_SECRET_KEYS` (`app_secret`,
+    `app_secret_key`, `client_secret`, `api_secret`) from the inbox payload
+    (call site: [§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder)), reusing
+    the concern's own list so the two can never disagree about what a secret is.
+    A Meta app secret is **app-wide**: one tenant administrator holding it can
+    forge `X-Hub-Signature-256` for every other tenant's inbox on the same Meta
+    app. `api_key` is deliberately kept — it is the channel's own WABA-scoped
+    send token and the dashboard reads it back.
+    ⚠️ The same file carries a `before_save` that **retains** a stored app
+    secret across a write that omits it, and it is load-bearing rather than
+    defensive: `provider_config` is a jsonb column the inbox controller
+    replaces wholesale, and the dashboard edits it read-modify-write
+    (`{ ...inbox.provider_config, api_key: newKey }`), so redacting the read
+    alone would make "rotate the API key" silently erase the channel's app
+    secret and switch webhook verification off with no error. Sending the key
+    with a blank value still clears it, so removal stays possible and explicit.
+    Hooked on the `Channel::Whatsapp.prepend_mod_with('Channel::Whatsapp')` line
+    upstream already ships. Specs:
+    `spec/custom/models/custom/channel/whatsapp_spec.rb`,
+    `spec/custom/controllers/api/v1/accounts/inbox_provider_config_redaction_spec.rb`.
+    ⚠️ **Namespace note:** this overlay makes `Custom::Channel` a real
+    namespace, which shadows the top-level `Channel` model for any *unqualified*
+    `Channel` reference lexically nested inside `module Custom; ... end` — the
+    same trap `Custom::SuperAdmin` documents above. No such file exists today
+    (the three nested-form overlays reference neither `Channel` nor `Webhooks`);
+    the rule for new ones is unchanged: compact form, or qualify with `::`.
   - Branding/MFA/mailers: `custom/app/services/custom/branding_setup.rb`,
     `custom/app/services/custom/mfa/management_service.rb`,
     `custom/app/mailers/custom/administrator_notifications/account_notification_mailer.rb`,
@@ -160,7 +232,7 @@ Everything here is net-new; pulling upstream can never conflict with it.
     §4.1; see that section for why the two go together.
 - **`config/initializers/custom_prepends.rb`** (net-new, previously
   undocumented here) — the fourth undocumented overlay file this pass found.
-  Two classes ship with no `prepend_mod_with` hook of their own, so this
+  Three classes ship with no `prepend_mod_with` hook of their own, so this
   initializer prepends onto them directly, inside `to_prepare` (so the
   prepend survives Zeitwerk reloading in development) and through
   `Custom::PrependOnce` (so that reloading does not STACK the overlay — a
@@ -173,9 +245,13 @@ Everything here is net-new; pulling upstream can never conflict with it.
   - `Devise::PasswordsController` ← `Custom::DeviseOverrides::SuperAdminPasswordsGuard`
     (super_admin password-reset MFA guard — see the Super Admin MFA
     enforcement bullet above and `docs/fork/SUPER_ADMIN.md` §4.3).
+  - `Webhooks::WhatsappController` ← `Custom::Webhooks::WhatsappController`
+    (mandatory Meta signature, §2 above). Reloadable target; entered here
+    rather than as a §3 hook line precisely so the signature hardening costs
+    **zero** upstream edits.
 
   Every other customization in this fork resolves through an upstream-supplied
-  hook (§3); these are the two classes where the fork had to add the hook
+  hook (§3); these are the classes where the fork had to add the hook
   itself, and it does so from a new file rather than editing an OSS one —
   zero core-file edits survives even the classes upstream didn't make
   extensible.
@@ -298,6 +374,78 @@ contiguous hunk. Resolve a conflict by re-applying the hunk, then re-run
 `spec/custom/routing/` and `spec/custom/initializers/` — they fail loudly if
 either edit is lost in a merge.
 
+### 4.2 The one `app/views` edit (`_inbox.json.jbuilder`)
+
+| File | Edit | Why it can't live in `custom/` |
+| --- | --- | --- |
+| `app/views/api/v1/models/_inbox.json.jbuilder` | one line: `json.provider_config resource.channel.try(:provider_config)` → `...try(:provider_config_without_app_secrets)`, plus a four-line comment | Jbuilder templates are rendered, not autoloaded, so there is no module to prepend. The only overlay alternative is a **full copy** under `custom/app/views` (the view path is already unshifted) — and this is a high-churn upstream file, so a shadow would silently freeze it, exactly the failure mode §1 flags for the two ERB shadows. One call site is the smaller, louder edit. |
+
+**What it changes.** That line renders a WhatsApp channel's entire
+`provider_config` jsonb to any account **administrator** — the role every
+vendor on this platform is provisioned into — on both `index` and `show`. Four
+of its keys are what `MetaTokenVerifyConcern` verifies inbound Meta webhook
+signatures with. A Meta app secret is **app-wide**, not per-inbox: whoever
+holds it can forge `X-Hub-Signature-256` for every inbox on the same Meta app
+— other tenants included — and can mint `appsecret_proof` for Graph calls. The
+redacting reader lives in the overlay
+(`Custom::Channel::Whatsapp#provider_config_without_app_secrets`, §2), so the
+OSS file only names it.
+
+**This is the one place the "additive only" contract rule (§0, and
+`README.md` ground rule 5) is deliberately broken** — four keys can disappear
+from an existing response. Accepted because the alternative is publishing a
+shared credential, and because nothing in Chatwoot *writes* those keys: no
+service, job, or frontend path sets `app_secret` / `app_secret_key` /
+`client_secret` / `api_secret` on a WhatsApp channel, so they are
+operator-placed values only. `api_key` — which the dashboard genuinely reads
+back — is **not** redacted.
+
+**Read and write move together.** The overlay's `before_save` retention is part
+of this change, not a separate nicety: without it, an admin rotating the API
+key would post the redacted config straight back and erase the stored secret.
+See the §2 bullet.
+
+**Known limitation — a per-channel `app_secret` is write-only and has no UI.**
+`grep app_secret app/javascript` returns nothing: no dashboard screen sets,
+shows, or clears one. The only route in or out is a raw
+`PATCH /api/v1/accounts/:id/inboxes/:id` with
+`channel[provider_config][app_secret]` (permitted through
+`Channel::Whatsapp::EDITABLE_ATTRS`) or the Rails console. Redaction plus
+retention makes that a one-way door for the dashboard specifically: the vendor
+screens build their write from the redacted read, so they can never send the
+explicit blank the retention hook treats as a deliberate removal. A stale
+secret — an inbox migrated to a different Meta app, say — therefore stays
+stored, keeps `meta_signature_verification_required?` true, never matches, and
+is invisible on every vendor screen. **Clearing it is an operator action:**
+send the key explicitly blank via the API/console
+(`channel: { provider_config: { …, app_secret: '' } }`), which the retention
+hook honours by design. Accepted rather than fixed with a masked write-only
+field, because nothing in Chatwoot writes these keys in the first place; if a
+future flow starts to, that field becomes necessary.
+
+**Rollout — this section (and §2's signature overlay) is inert until an
+operator seeds `WHATSAPP_APP_SECRET`.** The redaction takes effect on merge,
+but the signature requirement does not: it reads the installation config
+(`config/installation_config.yml:162`, surfaced under Super Admin → app configs,
+`whatsapp_embedded` group). Seeding it is a **DB-side** step per this fork's
+installation-config semantics — `.env.example` is not the mechanism and does not
+carry the key. Until that step runs, the unsigned-webhook hole stays open, so
+this must not be filed as "done" at merge. Sequence the seeding deliberately: it
+is the moment any inbox signed by a *different* Meta app starts 401ing, which is
+what the rejection log in §2 exists to make visible and what the per-channel
+`app_secret` above exists to fix.
+
+**On upstream pull:** if a merge takes upstream's version of this file, the
+line reverts to `try(:provider_config)` with no conflict and no visible diff —
+the same silent-revert class as the `rack_attack` correction in §4.1.
+`spec/custom/controllers/api/v1/accounts/inbox_provider_config_redaction_spec.rb`
+is what catches it — **measured, not assumed**: with the line reverted to
+`try(:provider_config)` that file reports `5 examples, 3 failures`. (It did not
+always: at `498a557e3c` its index fixture was a lazy `let` that never got
+created, so the guard asserted nothing. Fixed in `4025fb196b`; the 3 failures
+above are from re-running the control after that fix.) Re-run it after any
+upstream pull that touches `app/views/api/v1/models/`.
+
 ## 5. Additive frontend & branding (no Ruby overlay exists for Vue/JS)
 
 Vue/JS cannot be injected via `prepend_mod_with`, so these are direct edits — but
@@ -380,8 +528,19 @@ to upstream's text as the setup allows:
   Docker-only stack.
 - **`AGENTS.md`** — a fork-development section **appended** after upstream's
   content (additive; `CLAUDE.md` symlinks to it).
+- **`spec/controllers/webhooks/whatsapp_controller_spec.rb`** — one upstream
+  example narrowed. `skips signature validation for manual whatsapp cloud
+  channels without an app secret` ran with `WHATSAPP_APP_SECRET` **set**,
+  because upstream skipped verification either way. The fork requires a
+  signature as soon as the installation has a secret
+  ([§2](#2-fork-owned-trees-new-files--no-upstream-overlap)), so the example
+  now unsets it (`env: { WHATSAPP_APP_SECRET: nil }`) and its name says "without
+  any app secret". Same assertion, narrowed setup — it still pins upstream's
+  behavior for a stock deployment that never configured one. Both halves are
+  covered fork-side in
+  `spec/custom/controllers/webhooks/whatsapp_controller_spec.rb`.
 - **`spec/enterprise/controllers/api/v1/accounts/agents_controller_spec.rb`** —
-  the only upstream spec edited: its setup created agents **past** the cap,
+  the second upstream spec edited: its setup created agents **past** the cap,
   which `Custom::Concerns::QuotaGuard` makes unreachable, so setup now fills the
   account exactly **to** the cap (same assertion, inline comment explains why).
   This is a recurring class: future upstream specs that set up over-quota state
@@ -397,6 +556,8 @@ to upstream's text as the setup allows:
 | `/app/login` page | Renders Chatwoot's form unless `EXTERNAL_LOGIN_URL` is set. |
 | `GET /enterprise/api/v1/accounts/:id/limits` on **cloud** | Override returns `super` untouched; fork keys only appear on self-hosted (where it previously 404'd). |
 | Webhooks / message API / all routes | Not modified at all — the AI loop is an external service riding stock contracts. |
+| Inbound WhatsApp webhooks | Signature becomes mandatory only when the installation has a secret to verify with (`WHATSAPP_APP_SECRET`, or a per-channel one upstream already required). No config set ⇒ upstream's exact behavior. 360dialog inboxes and the `GET` verify handshake are never asked for a signature ([§2](#2-fork-owned-trees-new-files--no-upstream-overlap)). |
+| Inbox API payload | Unchanged except that four secret-shaped `provider_config` keys are removed for WhatsApp channels — the one non-additive response change in the fork, and it is a credential ([§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder)). `api_key` and every other key still render, and the administrator-only gating is untouched. |
 | Branding | Every string falls back to "Chatwoot"/upstream default until a branding config/ENV is set. |
 
 Proven by: `spec/custom` (83 examples, 0 failures) + upstream/enterprise suites
