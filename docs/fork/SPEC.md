@@ -9,8 +9,8 @@ infrastructure.
 > remains the source of truth for *scope and intent*; for what shipped and
 > where, see [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) (phase status)
 > and [UPSTREAM_DIFF.md](./UPSTREAM_DIFF.md) (change inventory). Only non-code
-> items remain: brand asset files, deploy-time config values, and the manual
-> cross-repo AI-loop run.
+> items remain: deploy-time config values and the manual cross-repo AI-loop
+> run.
 
 ## What changed vs. the original spec, and why
 
