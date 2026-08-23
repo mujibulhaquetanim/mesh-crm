@@ -19,6 +19,7 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-08-23 — Unsigned WhatsApp webhooks were accepted, and Meta app secrets were served to every tenant admin](./2026-08-23-unsigned-whatsapp-webhooks-accepted-and-meta-app-secrets-served-to-tenants.md)
 - [2026-08-20 — `docker compose build … | tail` reports exit 0 on a FAILED build (transient apk fetch blip stayed invisible)](./2026-08-20-docker-build-piped-to-tail-masks-a-failed-apk-step.md)
 - [2026-08-20 — `super_admin_login/email` throttled every operator into ONE bucket: 5 failures locked out the whole console](./2026-08-20-super-admin-login-email-throttle-shared-bucket-lockout.md)
 - [2026-08-19 — `/installation/onboarding` stays an anonymous super-admin factory after `fork:super_admin:bootstrap`](./2026-08-19-installation-onboarding-wizard-left-open-after-fork-bootstrap.md)

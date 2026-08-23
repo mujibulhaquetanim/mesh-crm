@@ -86,4 +86,8 @@ Read in this order:
 5. **Public contracts are frozen**: route paths, webhook event names, webhook
    payload shape, `X-Chatwoot-Timestamp` / `X-Chatwoot-Signature` /
    `X-Chatwoot-Delivery` headers, and existing response shapes may only be
-   extended additively, never renamed or removed.
+   extended additively, never renamed or removed. **One exception exists**, and
+   it took a security review to justify: the WhatsApp inbox payload no longer
+   renders the four secret-shaped `provider_config` keys — see
+   [UPSTREAM_DIFF.md §4.2](./UPSTREAM_DIFF.md#42-the-one-app-views-edit-inboxjsonjbuilder).
+   Removing a field still needs that bar.
