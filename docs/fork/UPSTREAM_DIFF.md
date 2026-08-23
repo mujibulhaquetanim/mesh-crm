@@ -170,7 +170,22 @@ Everything here is net-new; pulling upstream can never conflict with it.
     `#meta_app_secrets` another secret source is covered automatically.
     Untouched on purpose: the `GET` verify handshake (Meta signs deliveries,
     not subscriptions) and 360dialog (`provider == 'default'`) inboxes, which
-    carry no signature at all. Wired from `config/initializers/custom_prepends.rb`
+    carry no signature at all — so what this closes is the **`whatsapp_cloud`**
+    hole specifically; an unsigned 360dialog inbox stays as upstream leaves it.
+    The overlay also adds the **rejection log upstream has none of**: upstream
+    refuses with a bare `head :unauthorized`, and this is the one fork change
+    that can take live tenants offline, so `#log_meta_signature_rejection`
+    warns `[WHATSAPP_WEBHOOK_SIGNATURE] rejected phone_number=… channel_id=…
+    account_id=… candidates=N signature_header=present|missing` — enough to
+    identify the tenant and tell "Meta sent nothing" from "N candidates, none
+    matched", and never the secret, the signature, or the body. (The phone
+    number is `inspect`ed: it is a URL path segment, so a percent-encoded
+    newline would otherwise forge log lines.)
+    ⚠️ **Inert until `WHATSAPP_APP_SECRET` is seeded** as an InstallationConfig
+    — see the rollout paragraph in
+    [§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder). Merging closes
+    nothing on its own.
+    Wired from `config/initializers/custom_prepends.rb`
     below — **no upstream edit**. Specs:
     `spec/custom/controllers/webhooks/whatsapp_controller_spec.rb`.
   - **Meta app secret redaction:** `custom/app/models/custom/channel/whatsapp.rb`
@@ -390,12 +405,46 @@ of this change, not a separate nicety: without it, an admin rotating the API
 key would post the redacted config straight back and erase the stored secret.
 See the §2 bullet.
 
+**Known limitation — a per-channel `app_secret` is write-only and has no UI.**
+`grep app_secret app/javascript` returns nothing: no dashboard screen sets,
+shows, or clears one. The only route in or out is a raw
+`PATCH /api/v1/accounts/:id/inboxes/:id` with
+`channel[provider_config][app_secret]` (permitted through
+`Channel::Whatsapp::EDITABLE_ATTRS`) or the Rails console. Redaction plus
+retention makes that a one-way door for the dashboard specifically: the vendor
+screens build their write from the redacted read, so they can never send the
+explicit blank the retention hook treats as a deliberate removal. A stale
+secret — an inbox migrated to a different Meta app, say — therefore stays
+stored, keeps `meta_signature_verification_required?` true, never matches, and
+is invisible on every vendor screen. **Clearing it is an operator action:**
+send the key explicitly blank via the API/console
+(`channel: { provider_config: { …, app_secret: '' } }`), which the retention
+hook honours by design. Accepted rather than fixed with a masked write-only
+field, because nothing in Chatwoot writes these keys in the first place; if a
+future flow starts to, that field becomes necessary.
+
+**Rollout — this section (and §2's signature overlay) is inert until an
+operator seeds `WHATSAPP_APP_SECRET`.** The redaction takes effect on merge,
+but the signature requirement does not: it reads the installation config
+(`config/installation_config.yml:162`, surfaced under Super Admin → app configs,
+`whatsapp_embedded` group). Seeding it is a **DB-side** step per this fork's
+installation-config semantics — `.env.example` is not the mechanism and does not
+carry the key. Until that step runs, the unsigned-webhook hole stays open, so
+this must not be filed as "done" at merge. Sequence the seeding deliberately: it
+is the moment any inbox signed by a *different* Meta app starts 401ing, which is
+what the rejection log in §2 exists to make visible and what the per-channel
+`app_secret` above exists to fix.
+
 **On upstream pull:** if a merge takes upstream's version of this file, the
 line reverts to `try(:provider_config)` with no conflict and no visible diff —
 the same silent-revert class as the `rack_attack` correction in §4.1.
 `spec/custom/controllers/api/v1/accounts/inbox_provider_config_redaction_spec.rb`
-is what catches it; re-run it after any upstream pull that touches
-`app/views/api/v1/models/`.
+is what catches it — **measured, not assumed**: with the line reverted to
+`try(:provider_config)` that file reports `5 examples, 3 failures`. (It did not
+always: at `498a557e3c` its index fixture was a lazy `let` that never got
+created, so the guard asserted nothing. Fixed in `4025fb196b`; the 3 failures
+above are from re-running the control after that fix.) Re-run it after any
+upstream pull that touches `app/views/api/v1/models/`.
 
 ## 5. Additive frontend & branding (no Ruby overlay exists for Vue/JS)
 

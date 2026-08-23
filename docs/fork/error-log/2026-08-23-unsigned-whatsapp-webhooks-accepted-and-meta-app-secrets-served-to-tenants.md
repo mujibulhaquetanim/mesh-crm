@@ -89,6 +89,37 @@ Two overlays plus one call site. No upstream controller or model was edited.
    deliberately untouched: the `GET` verify handshake (Meta signs deliveries,
    not subscriptions — requiring one there makes an inbox unregisterable) and
    360dialog inboxes (`provider == 'default'`), which carry no signature at all.
+   **So what is closed is the `whatsapp_cloud` hole specifically** — a 360dialog
+   inbox remains injectable by anyone who knows its phone number, exactly as
+   upstream leaves it. Pre-existing, not a regression, and out of scope here
+   (360dialog deliveries carry nothing to verify), but it is not "WhatsApp
+   webhooks are now authenticated" full stop.
+
+   The overlay also adds **the rejection log upstream has none of.**
+   `verify_meta_signature!` refuses with a bare `head :unauthorized` — no log,
+   no metric, no correlation id — and this is the one change here that can take
+   live tenants offline. `#log_meta_signature_rejection` emits
+   `[WHATSAPP_WEBHOOK_SIGNATURE] rejected phone_number=… channel_id=…
+   account_id=… candidates=N signature_header=present|missing`: enough to name
+   the tenant and separate "Meta sent nothing to check" from "we had N
+   candidates and none matched", and never the secret, the signature, or the
+   body. The phone number is `inspect`ed because it is a URL path segment — a
+   percent-encoded newline would otherwise let a caller forge log lines.
+
+   ### ⚠️ Merging this closes nothing on its own
+
+   `WHATSAPP_APP_SECRET` is **not** in `.env.example` and is not seeded. It
+   exists as an InstallationConfig (`config/installation_config.yml:162`),
+   surfaced under Super Admin → app configs, `whatsapp_embedded` group
+   (`app/controllers/super_admin/app_configs_controller.rb:56`) — so seeding it
+   is a deliberate DB-side operator step, per this fork's installation-config
+   semantics. Until it runs, `meta_app_secrets` is `[nil]`, the override returns
+   false, and the unsigned-webhook hole stays exactly as wide as it was. **Do
+   not file this as done at merge.** The seeding is the rollout, and it is the
+   moment any cloud inbox signed by a *different* Meta app starts 401ing — which
+   is what the rejection log above exists to make visible, and what a per-channel
+   `provider_config['app_secret']` exists to fix (spec'd:
+   "accepts a POST signed with the channel's OWN app secret").
 
 2. **`custom/app/models/custom/channel/whatsapp.rb`** (new, on the
    `Channel::Whatsapp.prepend_mod_with` line upstream already ships) —
@@ -135,7 +166,7 @@ docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test
     spec/controllers/api/v1/accounts/inboxes_controller_spec.rb
 ```
 
-→ **138 examples, 0 failures** (21 fork examples: 7 + 9 + 5, plus both upstream
+→ **141 examples, 0 failures** (24 fork examples: 10 + 9 + 5, plus both upstream
 files — the second being the regression surface for the redaction: it asserts
 `provider_config` is present for an admin, absent for an agent, and that a
 `provider_config` PATCH round-trips).
@@ -152,9 +183,16 @@ nothing):
 | --- | --- |
 | `Custom::PrependOnce.call(Webhooks::WhatsappController, …)` commented out | **18 examples, 2 failures** — exactly "rejects an unsigned POST to a manual-source cloud inbox" and "rejects a POST signed with the wrong secret". The other 16, including all 11 upstream examples, stayed green: a signed POST is still accepted, 360dialog stays unsigned, the handshake stays open, the legacy no-secret installation is untouched. |
 | jbuilder line reverted to `try(:provider_config)` | **5 examples, 3 failures** — both index assertions plus the show one. The two that assert *unchanged* behaviour (non-secret keys still render, an agent still gets none) passed either way. |
+| `log_meta_signature_rejection` call removed | **10 examples, 1 failure** — "logs a structured warning when it rejects…". Its sibling ("logs nothing when the signature is valid") asserts an *absence* and so passes either way, which is the honest reading of that pair: one of them is the guard, the other is the anti-regression. |
 
-Both guards were restored with `git checkout --` and the full battery re-run:
-**138 examples, 0 failures** again.
+Each mutation was reverted immediately after its run and the full battery
+re-run: **141 examples, 0 failures**.
+
+The escape-hatch example ("accepts a POST signed with the channel's OWN app
+secret") needs no mutation to prove it non-vacuous: it signs with a secret that
+is *not* the global one and expects 200, which can only happen if the channel
+candidate is consulted. If it were not, the HMAC would not match and the request
+would 401.
 
 ### The gate caught a vacuous pass — worth its own note
 
@@ -212,5 +250,13 @@ docker run --rm --network none --entrypoint bundle \
 - Nothing in Chatwoot *writes* the four redacted keys on a WhatsApp channel —
   no service, job, or frontend path — so they are operator-placed values only.
   That is what makes both the redaction and the retention safe.
+- **A per-channel `app_secret` is write-only and has no dashboard surface.**
+  `grep app_secret app/javascript` → zero hits. With redaction + retention, a
+  stored one is invisible in the payload *and* unclearable from every vendor
+  screen (the dashboard builds its write from the redacted read, so it can never
+  send the explicit blank that means "remove"). Clearing is an operator action —
+  `PATCH …/inboxes/:id` (or the console) with
+  `channel[provider_config][app_secret]=''`. Full write-up in
+  `UPSTREAM_DIFF.md` §4.2 under "Known limitation".
 - `UPSTREAM_DIFF.md` §2 (the two overlays), §4.2 (the view edit and its
   silent-revert risk on an upstream pull), §6 (the narrowed upstream spec).
