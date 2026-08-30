@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_08_14_000000) do
+ActiveRecord::Schema[7.1].define(version: 2026_08_30_120000) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -624,8 +624,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_08_14_000000) do
     t.datetime "created_at", precision: nil, null: false
     t.datetime "updated_at", precision: nil, null: false
     t.string "instagram_id"
-    t.index ["page_id", "account_id"], name: "index_channel_facebook_pages_on_page_id_and_account_id", unique: true
-    t.index ["page_id"], name: "index_channel_facebook_pages_on_page_id"
+    t.index ["page_id"], name: "index_channel_facebook_pages_on_page_id_unique", unique: true
   end
 
   create_table "channel_instagram", force: :cascade do |t|

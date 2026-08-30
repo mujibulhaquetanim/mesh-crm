@@ -13,8 +13,7 @@
 #
 # Indexes
 #
-#  index_channel_facebook_pages_on_page_id                 (page_id)
-#  index_channel_facebook_pages_on_page_id_and_account_id  (page_id,account_id) UNIQUE
+#  index_channel_facebook_pages_on_page_id_unique  (page_id) UNIQUE
 #
 
 class Channel::FacebookPage < ApplicationRecord
@@ -66,3 +65,5 @@ class Channel::FacebookPage < ApplicationRecord
     true
   end
 end
+
+Channel::FacebookPage.prepend_mod_with('Channel::FacebookPage')
