@@ -277,6 +277,7 @@ lowest-risk possible edits.
 | `app/models/label.rb` | `Label.prepend_mod_with('Label')` | `Custom::Label` |
 | `app/models/agent_bot.rb` | `AgentBot.prepend_mod_with('AgentBot')` | `Custom::AgentBot` |
 | `app/models/integrations/hook.rb` | `Integrations::Hook.prepend_mod_with(...)` | `Custom::Integrations::Hook` |
+| `app/models/channel/facebook_page.rb` | `Channel::FacebookPage.prepend_mod_with('Channel::FacebookPage')` | `Custom::Channel::FacebookPage` (global `page_id` uniqueness — [§3.1](#31-the-one-upstream-index-the-fork-redefines)) |
 | `app/controllers/api/v1/accounts/teams_controller.rb` | `...TeamsController.prepend_mod_with(...)` | quota `before_action` |
 | `app/controllers/api/v1/accounts/webhooks_controller.rb` | same pattern | quota `before_action` |
 | `app/controllers/api/v1/accounts/labels_controller.rb` | same pattern | quota `before_action` |
@@ -302,6 +303,49 @@ lowest-risk possible edits.
 > collateral churn in `category.rb`, `platform_banner.rb`,
 > `enterprise/.../captain/document.rb`, and `enterprise/.../company.rb` was
 > reverted to upstream text on 2026-07-10.)
+
+### 3.1 The one upstream index the fork redefines
+
+Every other fork migration is additive — a new table, column, or index. This one
+**replaces** an index upstream created, and it is the only one:
+
+| | upstream | fork (migration `20260830120000`) |
+| --- | --- | --- |
+| `channel_facebook_pages` | `UNIQUE (page_id, account_id)` + plain `(page_id)` | `UNIQUE (page_id)` |
+
+**Why it cannot stay additive.** Upstream lets two accounts each hold a row for
+the same Facebook Page, and then resolves inbound by Page across all of them:
+
+```rb
+# lib/integrations/facebook/message_creator.rb:32, :39
+Channel::FacebookPage.where(page_id: response.sender_id).each do |page|
+```
+
+`.each` — so one customer's Messenger message is delivered into **every**
+account holding that Page. On a single-tenant install that is harmless; on this
+platform it is a cross-tenant message leak. Two further sites take an arbitrary
+single match (`lib/integrations/facebook/delivery_status.rb:35`,
+`app/controllers/webhooks/instagram_controller.rb:62`, both `find_by`), so
+delivery receipts and IG events route non-deterministically rather than
+duplicating. A Page's Messenger webhook is registered against the Meta **app**,
+not an account, so there is no coherent way to route it to two owners.
+
+The sibling channels already hold the stronger invariant — `channel_instagram`
+is `UNIQUE (instagram_id)` and `channel_whatsapp` is `UNIQUE (phone_number)` —
+which is why this reads as an upstream inconsistency rather than a design
+decision.
+
+**Conflict risk on upstream pull: low, but silent.** Nothing upstream references
+the index by name, and `db/schema.rb` is already the largest conflict surface
+(§1), so a merge that takes upstream's schema would quietly restore the
+composite index with no failing test. `spec/custom/models/channel_facebook_page_global_uniqueness_spec.rb`
+is the tripwire: its last example saves with `validate: false` and expects
+`ActiveRecord::RecordNotUnique`, which only passes while the database constraint
+is the strict one. Re-run it after any upstream merge that touches `db/schema.rb`.
+
+**Not upstreamable as-is** — it would be a breaking change for any installation
+deliberately sharing a Page across accounts. If it is ever proposed upstream, it
+needs a deprecation path, not this migration.
 
 ## 4. The one bootstrap edit (`config/application.rb`, +6 lines: 2 code + 4 comment)
 

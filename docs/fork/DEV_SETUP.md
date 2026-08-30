@@ -550,8 +550,54 @@ only** — then flip the flag. Details and rotation flags in
 - `FRONTEND_URL` in the file is the public **tunnel** hostname
   (`~/.cloudflared/config.yml` routes it to `localhost:3000`). The tunnel can
   front either this stack or the real deployment — never both — so check what
-  is behind it before sharing the URL. Browser testing against
+  is behind it before sharing the URL. Most browser testing against
   `http://localhost:3000` needs no tunnel.
+- ⚠ **CONNECTING A META CHANNEL IS THE EXCEPTION, AND IT FAILS SILENTLY.** See
+  "Connecting a Meta channel requires HTTPS" below before you try it over
+  `localhost`.
+### ⚠ Connecting a Meta channel requires HTTPS — over `localhost` it silently does nothing
+
+Everything else in this stack works fine over `http://localhost:3000`. Adding a
+**Facebook or Instagram inbox** does not, and the way it fails is the problem:
+**nothing happens at all.** No error toast, no console exception, no request in
+the network tab, no row in the database. The button simply does not respond.
+
+The cause is Meta's, not the fork's. Chatwoot's Facebook channel calls
+`FB.login` through Meta's JavaScript SDK, and the SDK **refuses to run on an
+http page** — it writes
+
+```
+The method FB.login can no longer be called from http pages.
+```
+
+to the console and **returns**. It does not throw and it never invokes your
+callback, so any `try/catch` or promise wrapper around it waits forever. The
+platform side has an incident write-up of exactly this shape:
+`agentic-str/docs/troubleshooting/328`.
+
+Two things must therefore be true before you attempt a channel connect:
+
+1. **The tunnel is running**, so the https hostname resolves to this stack:
+
+   ```sh
+   cloudflared tunnel run mesh-crm    # routes mesh-crm.<domain> -> localhost:3000
+   ```
+
+   Check it: `curl -s -o /dev/null -w '%{http_code}' https://mesh-crm.<domain>/`
+   must be **200**. A **530** means the tunnel is up at Cloudflare but has no
+   local origin behind it — usually this stack is down, or a host reboot killed
+   `cloudflared` (containers all showing `Exited (255)` at the same timestamp is
+   that signature).
+
+2. **You open the dashboard at the https hostname**, not `localhost:3000`. The
+   Meta app's *JavaScript SDK host domains* whitelist lists only the https
+   host, so even reaching it another way will not help.
+
+`FRONTEND_URL` should already be the https hostname in `.env.prod-local`; the
+SSO links this fork mints for platform users are built from it, so if it is set
+to `localhost` those links will drop a vendor onto an http page and the same
+silent failure follows them there.
+
 - Teardown **including the throwaway data**:
   `docker compose -f docker-compose.prod-local.yaml down -v`. The volumes are
   namespaced `prodlocal_*` so this can never touch the dev or agentic-str
