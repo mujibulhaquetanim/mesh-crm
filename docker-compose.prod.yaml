@@ -1,0 +1,156 @@
+# Production mesh-crm: THE FORK, against Neon, on one VPS beside the platform
+# API and dashboard (agentic-str D-033).
+#
+#   docker compose -f docker-compose.prod.yaml up -d
+#
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ ⚠ WHY THIS FILE EXISTS BESIDE `docker-compose.production.yaml`            │
+# │                                                                          │
+# │ That file pins `image: chatwoot/chatwoot:latest` — UPSTREAM's published   │
+# │ image, with NONE of the `custom/` overlay. Running it in production would │
+# │ ship: no super-admin MFA, no billable-seat quota fix, no                  │
+# │ `platform_managed` webhook serialization, and none of the                 │
+# │ `UNIQUE (page_id)` Facebook-Page fan-out fix (PR #24) — the defect that   │
+# │ let one Page reach every account.                                         │
+# │                                                                          │
+# │ It also ships its own `postgres` service, which production does not use.  │
+# │                                                                          │
+# │ This file is `docker-compose.prod-local.yaml` with the throwaway database │
+# │ swapped for Neon. Keep the two in step: prod-local is where the boot is   │
+# │ rehearsed, so a difference between them is a difference nobody tested.    │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+# ⚠ A DISTINCT PROJECT NAME. Compose derives it from the directory, so all four
+# compose files here would otherwise share the namespace `mesh-crm` and recreate
+# each other's containers against different volumes. That has already happened
+# once between the dev and prod-local stacks.
+name: mesh-crm-prod
+
+x-app: &app
+  # Built from THIS repo, never pulled. `docker build -t mesh-crm:production .`
+  # — see docs/fork/DEV_SETUP.md for the build, which must run before this file.
+  image: mesh-crm:production
+  env_file: .env
+  environment: &app-env
+    # ⚠ `environment:` BEATS `env_file:`. Same mechanism as prod-local: `.env`
+    # supplies the app secrets, and everything that decides WHICH infrastructure
+    # is reached is stated here so it cannot be inherited by accident.
+    RAILS_ENV: production
+    NODE_ENV: production
+    INSTALLATION_ENV: docker
+    RAILS_LOG_TO_STDOUT: 'true'
+
+    # ── The database: Neon `meta-crm`. NOT the platform's `neondb`.
+    #
+    # ⚠ These are two different Neon databases and confusing them is
+    # destructive in both directions: `prisma migrate deploy` against meta-crm
+    # would apply the platform's schema over Chatwoot's, and Rails migrations
+    # against neondb would do the reverse. agentic-str's deploy.yml carries the
+    # same warning from the other side.
+    #
+    # `DATABASE_URL` takes precedence over the individual POSTGRES_* params
+    # (docker/entrypoints/helpers/pg_database_url.rb relies on that), so it is
+    # the single place the connection is decided. ⚠ `sslmode=require` belongs on
+    # the URL itself, not only in database.yml — an explicit DATABASE_URL
+    # overrides that file's merge, and Neon refuses a non-SSL connection.
+    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — the Neon meta-crm connection string, sslmode=require}
+    POSTGRES_SSLMODE: require
+
+    # ── Redis: this stack's OWN container, for Sidekiq.
+    # Separate from the platform's BullMQ Redis by design (D-033 §4): different
+    # persistence needs, and a FLUSHALL from either side would take the other's
+    # in-flight jobs.
+    REDIS_URL: redis://redis:6379
+    REDIS_PASSWORD: ''
+    REDIS_SENTINELS: ''
+    REDIS_SENTINEL_MASTER_NAME: ''
+
+    # ── Where the app thinks it lives. PUBLIC hostname, always.
+    # Meta's OAuth callbacks are made by Meta's servers, so a container or
+    # loopback address is unreachable to them and channel connection cannot
+    # complete (troubleshooting/039).
+    FRONTEND_URL: ${CRM_FRONTEND_URL:?CRM_FRONTEND_URL is not set — the public https origin, e.g. https://mesh-crm.example.com}
+
+    # ── Object storage. `local` would put attachments on a container filesystem
+    # that every redeploy discards.
+    ACTIVE_STORAGE_SERVICE: ${CRM_ACTIVE_STORAGE_SERVICE:-s3_compatible}
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - prod_redis:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks: [internal]
+
+  rails:
+    <<: *app
+    depends_on:
+      redis:
+        condition: service_healthy
+    # ⚠ NO `entrypoint:` override, and no host port binding.
+    #
+    # The repo's `docker/entrypoints/rails.sh` runs `bundle install` on every
+    # boot — a dev convenience that is wrong against an image built with
+    # `BUNDLE_WITHOUT=development:test`. It also does NOT migrate, which is
+    # correct: migrations are a deliberate step, never a side effect of a
+    # restart (see the bring-up note at the bottom).
+    #
+    # No `ports:` — the tunnel reaches this over the `mesh` network by service
+    # name. Publishing 3000 on the host would expose Chatwoot beside the tunnel
+    # and around the SSO lockdown.
+    command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
+    volumes:
+      - prod_storage:/app/storage
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:3000/api || exit 1']
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+    restart: unless-stopped
+    networks: [internal, mesh]
+
+  sidekiq:
+    <<: *app
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    volumes:
+      - prod_storage:/app/storage
+    restart: unless-stopped
+    networks: [internal, mesh]
+
+volumes:
+  # Named distinctly so `down -v` here can never reach the dev stack's
+  # `mesh-crm_*` volumes or prod-local's `prodlocal_*` ones.
+  prod_redis:
+  prod_storage:
+
+networks:
+  internal:
+  # Shared with agentic-str's `docker-compose.production.yaml`, so the platform
+  # API can reach `rails:3000` and the tunnel can route to all three services.
+  # External so neither stack owns the other's lifetime:
+  #   docker network create mesh
+  mesh:
+    external: true
+
+# ── BRING-UP ────────────────────────────────────────────────────────────────
+# Migrations are a SEPARATE, deliberate step — nothing here migrates on boot.
+#
+#   docker build -t mesh-crm:production .
+#   docker compose -f docker-compose.prod.yaml run --rm rails \
+#     bundle exec rails db:chatwoot_prepare
+#   docker compose -f docker-compose.prod.yaml up -d
+#
+# Verify by public hostname, not by `docker ps` — "containers are Up" is not
+# verification:
+#   curl -s https://<CRM_FRONTEND_URL>/api    # queue_services + data_services ok
