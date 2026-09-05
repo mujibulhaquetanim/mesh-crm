@@ -20,7 +20,7 @@ to it as root access to the platform.
 >   -e SUPER_ADMIN_EMAIL='<your-operator-email>' \
 >   -e SUPER_ADMIN_PASSWORD='<new-strong-password>' \
 >   -e SUPER_ADMIN_ROTATE_PASSWORD=true \
->   chatwoot-rails-1 bundle exec rails fork:super_admin:bootstrap
+>   mesh-crm-prodlocal-rails-1 bundle exec rails fork:super_admin:bootstrap
 > ```
 >
 > (Or the console form in §4.2.) The new password must satisfy Chatwoot's policy
@@ -29,25 +29,50 @@ to it as root access to the platform.
 
 ## 0. Quick access — this local Docker instance
 
+⚠ **THERE ARE TWO STACKS, AND THEY DISAGREE ON BOTH VALUES BELOW.** The container
+name comes from the compose project, and the Super Admin lives in whichever
+DATABASE that stack points at — so they are different accounts, not one account
+seen twice:
+
+| Stack | Compose `name:` | Rails container | Database |
+| --- | --- | --- | --- |
+| prod-local (`docker-compose.prod-local.yaml`) | `mesh-crm-prodlocal` | `mesh-crm-prodlocal-rails-1` | local throwaway |
+| dev (`docker-compose.yaml`) | `mesh-crm` | `mesh-crm-rails-1` | Neon |
+
+**The table below is the prod-local stack**, which is the one normally up for
+testing. On the dev stack substitute the container — and expect a DIFFERENT
+Super Admin, because it is a different database.
+
+⚠ This section said `chatwoot-rails-1` and a `@gmail.com` login until 2026-09-05,
+and **neither belonged to either stack** — `chatwoot-rails-1` is an old compose
+project name that no longer exists. Copy-pasting it fails with "No such
+container", and the email failed with `RecordNotFound`. **Derive both rather than
+trusting this page:**
+
+```bash
+docker ps --format '{{.Names}}' | grep rails            # which container is up
+docker exec <that-container> bundle exec rails runner 'pp SuperAdmin.pluck(:id, :email)'
+```
+
 If you just want to log in **right now** on your machine, here are the concrete
-values for the running dev instance (the abstract `<chatwoot-host>` placeholders
-elsewhere in this doc resolve to these locally):
+values for the running prod-local instance (the abstract `<chatwoot-host>`
+placeholders elsewhere in this doc resolve to these locally):
 
 | Thing | Value (this local instance) |
 | --- | --- |
 | **URL (browser)** | **`http://localhost:3000/super_admin`** — visiting it unauthenticated redirects to `http://localhost:3000/super_admin/sign_in`. |
-| **Login email** | **`tools.meshever@gmail.com`** — the only Super Admin on this instance (`SuperAdmin` id `109`). |
+| **Login email** | **`ops@prod-local.invalid`** — the only Super Admin on THIS (prod-local) database, `SuperAdmin` id `3`. ⚠ The id is per-database; the dev stack's Neon database has its own. Read it, never assume it. |
 | **Password** | The one you set when you created this operator. It is **not** stored in `chatwoot/.env` (no `SUPER_ADMIN_*` vars) and cannot be read back — it's a bcrypt hash in the DB. If you've forgotten it, reset it with the command below. |
 | **After login** | You land on the console dashboard (`/super_admin`, `SuperAdmin::DashboardController#index`) — accounts are one click away in the nav, not the landing page (§4.0 says the same). Background jobs: **`http://localhost:3000/monitoring/sidekiq`**. Sign out: **`http://localhost:3000/super_admin/logout`**. |
-| **Rails container** | `chatwoot-rails-1` (from `docker ps`). Port 3000 is published to the host; `FRONTEND_URL=http://localhost:3000`. |
+| **Rails container** | `mesh-crm-prodlocal-rails-1` (from `docker ps`). Port 3000 is published to the host; `FRONTEND_URL=http://localhost:3000`. |
 
 > **How this operator was created:** manually on the host (not via the dev seed and
 > not via the `.env` bootstrap — those vars aren't set here). There is **no**
 > `john@acme.inc` seed admin on this instance, which is the secure state. Confirm
 > anytime with:
 > ```bash
-> docker exec chatwoot-rails-1 bundle exec rails runner 'pp SuperAdmin.pluck(:id, :email)'
-> # => [[109, "tools.meshever@gmail.com"]]
+> docker exec mesh-crm-prodlocal-rails-1 bundle exec rails runner 'pp SuperAdmin.pluck(:id, :email)'
+> # => [[3, "ops@prod-local.invalid"]]   # id differs per database — read it, do not assume
 > ```
 
 **Forgot / want to change the password?** There is no email reset for this scope —
@@ -57,13 +82,13 @@ rejects it):
 ```bash
 docker exec \
   -e NEW_SUPER_ADMIN_PASSWORD='<new-strong-password>' \
-  chatwoot-rails-1 bundle exec rails runner '
-    sa = SuperAdmin.find_by!(email: "tools.meshever@gmail.com")
+  mesh-crm-prodlocal-rails-1 bundle exec rails runner '
+    sa = SuperAdmin.find_by!(email: "ops@prod-local.invalid")
     sa.password = ENV.fetch("NEW_SUPER_ADMIN_PASSWORD"); sa.save!
     puts "password reset for #{sa.email}"'
 ```
 
-Then log in at `http://localhost:3000/super_admin` with `tools.meshever@gmail.com`
+Then log in at `http://localhost:3000/super_admin` with `ops@prod-local.invalid`
 and the new password.
 
 > **Local dev only.** These values (localhost, single operator) describe your laptop
@@ -295,7 +320,7 @@ separately per `../../../agentic-str/docs/operations/chatwoot-access-lockdown.md
 docker exec \
   -e SUPER_ADMIN_EMAIL='ops@yourcompany.com' \
   -e SUPER_ADMIN_PASSWORD='<strong-password>' \
-  chatwoot-rails-1 bundle exec rails fork:super_admin:bootstrap
+  mesh-crm-prodlocal-rails-1 bundle exec rails fork:super_admin:bootstrap
 # → "Created Super Admin ops@yourcompany.com"
 ```
 
@@ -308,7 +333,7 @@ docker exec \
   -e SUPER_ADMIN_EMAIL='ops@yourcompany.com' \
   -e SUPER_ADMIN_PASSWORD='<new-strong-password>' \
   -e SUPER_ADMIN_ROTATE_PASSWORD=true \
-  chatwoot-rails-1 bundle exec rails fork:super_admin:bootstrap
+  mesh-crm-prodlocal-rails-1 bundle exec rails fork:super_admin:bootstrap
 # → "Rotated Super Admin password for ops@yourcompany.com"
 ```
 
@@ -338,7 +363,7 @@ Once at least one Super Admin exists, use the console's **Users → New** screen
 the type to Super Admin. Or, out-of-band on the host (never a seeded default):
 
 ```bash
-docker exec chatwoot-rails-1 bundle exec rails runner '
+docker exec mesh-crm-prodlocal-rails-1 bundle exec rails runner '
   sa = SuperAdmin.new(
     name: "Ops <name>",
     email: "ops-<name>@yourcompany.com",
@@ -354,12 +379,12 @@ docker exec chatwoot-rails-1 bundle exec rails runner '
 
 ```bash
 # Reset a password:
-docker exec chatwoot-rails-1 bundle exec rails runner '
+docker exec mesh-crm-prodlocal-rails-1 bundle exec rails runner '
   sa = SuperAdmin.find_by!(email: "ops-<name>@yourcompany.com")
   sa.password = ENV.fetch("NEW_SUPER_ADMIN_PASSWORD"); sa.save!'
 
 # Remove access (demote or delete):
-docker exec chatwoot-rails-1 bundle exec rails runner '
+docker exec mesh-crm-prodlocal-rails-1 bundle exec rails runner '
   SuperAdmin.find_by!(email: "ops-<name>@yourcompany.com").destroy!'
 ```
 
@@ -439,7 +464,7 @@ first if not):
 ```bash
 docker exec \
   -e SUPER_ADMIN_MFA_EMAIL='ops@yourcompany.com' \
-  chatwoot-rails-1 bundle exec rails fork:super_admin:mfa_enroll
+  mesh-crm-prodlocal-rails-1 bundle exec rails fork:super_admin:mfa_enroll
 # → prints the otpauth:// provisioning URI (branded with INSTALLATION_NAME, or
 #   "Chatwoot" if unset) and 10 backup codes — ONCE. Scan the URI into an
 #   authenticator app and store the backup codes securely; neither is shown again.
@@ -508,10 +533,10 @@ deploy time:
 
 ```bash
 # Who has Super Admin? (should be only your named operators — no john@acme.inc)
-docker exec chatwoot-rails-1 bundle exec rails runner 'pp SuperAdmin.pluck(:id, :email)'
+docker exec mesh-crm-prodlocal-rails-1 bundle exec rails runner 'pp SuperAdmin.pluck(:id, :email)'
 
 # No tenant-provisioned user is a Super Admin (expect []):
-docker exec chatwoot-rails-1 bundle exec rails runner \
+docker exec mesh-crm-prodlocal-rails-1 bundle exec rails runner \
   'pp User.where(type: "SuperAdmin").where("email LIKE ?", "%@handoff.local").pluck(:email)'
 
 # Is the console publicly reachable? (from OUTSIDE the allowlist this must NOT return 200)
