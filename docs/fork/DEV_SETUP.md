@@ -430,6 +430,20 @@ overlay — the opposite of testing this fork), and `.env` points `POSTGRES_HOST
 at the live Neon database. The prod-local file's header comment spells out both
 disqualifiers.
 
+**There are THREE prod-shaped compose files — pick by what database you want:**
+
+| File | Image | Database | Use it for |
+| --- | --- | --- | --- |
+| `docker-compose.prod-local.yaml` | **the fork** (built from this tree) | local, throwaway | rehearsing a production boot on this machine — **this section** |
+| `docker-compose.prod.yaml` | **the fork** (built from this tree) | **Neon** (live) | the real single-VPS production deploy (added in fork PR #25, agentic-str D-033) |
+| `docker-compose.production.yaml` | `chatwoot/chatwoot:latest` — **upstream, no `custom/` overlay** | bundles a `postgres` service (`pgvector/pgvector:pg16`) but sets no `POSTGRES_HOST`, so `.env` decides — and `.env` points at live Neon, leaving the bundled one running and unused | **nothing here.** Running it ships none of the fork: no super-admin MFA, no billable-seat quota fix, no `platform_managed` webhook serialization, and none of the `UNIQUE (page_id)` Facebook-Page fan-out fix (PR #24) |
+
+⚠ `prod.yaml` and `prod-local.yaml` are deliberately the same file with the
+throwaway database swapped for Neon, so **a difference between them is a
+difference nobody rehearsed** — change them together. `prod.yaml`'s own header
+says this; it is repeated here because the names are one hyphen apart and the
+third name is a near-miss for both.
+
 ### What must be present
 
 - **`.env` must exist** — the stack loads it (`env_file: .env`) for the app
