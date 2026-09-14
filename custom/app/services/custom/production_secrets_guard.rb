@@ -40,6 +40,14 @@ module Custom
     # Upstream's .env.example ships this prefix; Rails accepts any non-empty
     # string as SECRET_KEY_BASE, so a copied placeholder boots clean and signs
     # every session with a value published on GitHub.
+    #
+    # ⚠ This is the ONLY SECRET_KEY_BASE case this guard actually decides.
+    # When the variable is absent entirely, Devise's engine initializer calls
+    # `secret_key_base` during `run_initializers` (devise/rails.rb:41 ->
+    # secret_key_finder.rb:24) and Rails raises at application.rb:435 — several
+    # phases BEFORE `after_initialize`, where this runs. That case is already
+    # fail-closed and loud; it just fails with Rails' error, not ours.
+    # See docs/fork/error-log/2026-09-14-devise-preempts-the-production-secrets-guard.md.
     PLACEHOLDER_PREFIX = 'replace_with'.freeze
 
     def self.run!(env: ENV, rails_env: Rails.env, encryption_config: ActiveRecord::Encryption.config)
@@ -88,6 +96,10 @@ module Custom
       value.blank? || value.start_with?(PLACEHOLDER_PREFIX)
     end
 
+    # ⚠ "every missing variable at once" is true of what THIS guard can see. If
+    # SECRET_KEY_BASE is absent entirely, Rails aborts in Devise's initializer
+    # before this is reached, so the operator sees Rails' error first and only
+    # learns about the encryption keys after supplying a secret_key_base.
     def message_for(missing)
       <<~MESSAGE
         Refusing to boot: #{missing.size} required production secret(s) are unset or still placeholder text.
