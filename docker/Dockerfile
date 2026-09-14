@@ -81,8 +81,16 @@ COPY . /app
 RUN mkdir -p /app/log
 
 # generate production assets if production environment
+#
+# SECRET_KEY_BASE_DUMMY, not a placeholder SECRET_KEY_BASE: this load runs with
+# RAILS_ENV=production inside the BUILD, where no real secret exists. It is
+# Rails' own signal for that (railties application.rb; the Dockerfile Rails
+# generates uses the same flag), and Custom::ProductionSecretsGuard keys off it
+# to tell a build-time load from a real boot. With a placeholder instead, the
+# guard cannot tell the difference and fails `docker build` rather than a
+# misconfigured deploy.
 RUN if [ "$RAILS_ENV" = "production" ]; then \
-  SECRET_KEY_BASE=precompile_placeholder RAILS_LOG_TO_STDOUT=enabled bundle exec rake assets:precompile \
+  SECRET_KEY_BASE_DUMMY=1 RAILS_LOG_TO_STDOUT=enabled bundle exec rake assets:precompile \
   && rm -rf spec node_modules tmp/cache; \
   fi
 
