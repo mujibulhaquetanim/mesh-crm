@@ -83,8 +83,21 @@ x-app: &app
     # complete (troubleshooting/039).
     FRONTEND_URL: ${CRM_FRONTEND_URL:?CRM_FRONTEND_URL is not set — the public https origin, e.g. https://mesh-crm.example.com}
 
-    # ── Object storage. `local` would put attachments on a container filesystem
-    # that every redeploy discards.
+    # ── Object storage.
+    #
+    # ⚠ CORRECTED 2026-09-14. This said "`local` would put attachments on a
+    # container filesystem that every redeploy discards" — that is FALSE here:
+    # `prod_storage:/app/storage` is mounted on both rails and sidekiq below, so
+    # `local` DOES survive redeploys. The real objection to `local` is different
+    # and weaker: the volume sits on ONE box with no backup, and migrating to R2
+    # later means updating `active_storage_blobs.service_name` on every row,
+    # whereas an s3_compatible endpoint swap needs no database change at all.
+    #
+    # ⚠ THE DEFAULT BELOW IS THE DANGEROUS ONE. Unset, this resolves to
+    # `s3_compatible`, and config/storage.yml reads every credential as
+    # `ENV.fetch('STORAGE_…', '')` — an EMPTY STRING, not an error. So a missing
+    # STORAGE_* set boots healthy and fails on the first attachment upload, with
+    # no signal at boot. `scripts/check-prod-env.py` fails closed on exactly this.
     ACTIVE_STORAGE_SERVICE: ${CRM_ACTIVE_STORAGE_SERVICE:-s3_compatible}
 
 services:
