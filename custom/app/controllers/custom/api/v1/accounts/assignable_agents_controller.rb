@@ -8,9 +8,17 @@
 # (app/javascript/dashboard/api/assignableAgents.js), so scoping only the model
 # would have left the visible dropdown still offering the platform service admin.
 #
-# Unlike the other custom controllers, upstream ships no `prepend_mod_with` hook
-# on this class, so the prepend is injected from
-# config/initializers/custom_prepends.rb (net-new file, merge-safe).
+# ⚠ This used to say "upstream ships no `prepend_mod_with` hook on this class".
+# That stopped being true in the 2026-09-14 upstream sync: upstream now calls
+# `Api::V1::Accounts::AssignableAgentsController.prepend_mod_with(...)` itself,
+# which resolves this module by name and prepends it.
+#
+# The manual entry in config/initializers/custom_prepends.rb is therefore now a
+# no-op — `Custom::PrependOnce` matches by NAME, sees upstream's prepend of the
+# same name, and declines. It is kept deliberately rather than deleted: this
+# overlay is a security control (it hides the platform service admin from the
+# assignee picker), and a belt-and-braces prepend that costs one no-op is worth
+# more than the line it saves if upstream ever drops the hook again.
 module Custom
   module Api
     module V1

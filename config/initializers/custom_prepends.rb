@@ -17,8 +17,14 @@
 Rails.application.config.to_prepare do
   # Assignee picker: upstream builds the list inline instead of delegating to
   # Inbox#assignable_agents, so the model override alone does not cover it.
-  # (Reloadable target — the guard is a no-op here, but it costs nothing and
-  # keeps one shape for both entries.)
+  #
+  # ⚠ As of the 2026-09-14 upstream sync this entry no longer does the work:
+  # upstream added its own `prepend_mod_with` to that controller, which prepends
+  # this same module by name first. `PrependOnce` matches by name, so this call
+  # now always returns false. Kept on purpose — the overlay is a security control
+  # (it hides the platform service admin from the picker), and this is the
+  # fallback if upstream drops the hook again. Do not "clean it up" without
+  # re-checking that upstream still ships the hook.
   Custom::PrependOnce.call(
     Api::V1::Accounts::AssignableAgentsController,
     Custom::Api::V1::Accounts::AssignableAgentsController

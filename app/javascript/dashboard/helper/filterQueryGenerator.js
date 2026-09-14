@@ -1,12 +1,20 @@
+const TIMESTAMP_ATTRIBUTES = ['created_at', 'last_activity_at'];
+
+export const withTimestampTimezone = filter => {
+  const { timezone, ...attributes } = filter;
+  if (!TIMESTAMP_ATTRIBUTES.includes(filter.attribute_key)) return attributes;
+
+  return {
+    ...attributes,
+    timezone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+};
+
 const setArrayValues = item => {
   return item.values[0]?.id ? item.values.map(val => val.id) : item.values;
 };
 
 const generateValues = item => {
-  if (item.attribute_key === 'content') {
-    const values = item.values || '';
-    return values.split(',');
-  }
   if (Array.isArray(item.values)) {
     return setArrayValues(item);
   }
@@ -19,14 +27,12 @@ const generateValues = item => {
   return [item.values];
 };
 
-const generatePayload = data => {
+const generatePayload = (data, { useLocalTimezone = true } = {}) => {
   // Make a copy of data to avoid vue data reactivity issues
   const filters = JSON.parse(JSON.stringify(data));
   let payload = filters.map(item => {
-    // If item key is content, we will split it using comma and return as array
-    // FIX ME: Make this generic option instead of using the key directly here
     item.values = generateValues(item);
-    return item;
+    return useLocalTimezone ? withTimestampTimezone(item) : item;
   });
 
   // For every query added, the query_operator is set default to and so the

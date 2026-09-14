@@ -31,7 +31,9 @@
 name: mesh-crm-prod
 
 x-app: &app
-  # Built from THIS repo, never pulled. `docker build -t mesh-crm:production .`
+  # Built from THIS repo, never pulled:
+  # `docker build -f docker/Dockerfile -t mesh-crm:production .`
+  # ⚠ `-f` is REQUIRED — there is no Dockerfile at the repo root.
   # — see docs/fork/DEV_SETUP.md for the build, which must run before this file.
   image: mesh-crm:production
   env_file: .env
@@ -54,11 +56,15 @@ x-app: &app
     #
     # `DATABASE_URL` takes precedence over the individual POSTGRES_* params
     # (docker/entrypoints/helpers/pg_database_url.rb relies on that), so it is
-    # the single place the connection is decided. ⚠ `sslmode=require` belongs on
+    # the single place the connection is decided. ⚠ `sslmode=verify-full` belongs on
     # the URL itself, not only in database.yml — an explicit DATABASE_URL
     # overrides that file's merge, and Neon refuses a non-SSL connection.
-    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — the Neon meta-crm connection string, sslmode=require}
-    POSTGRES_SSLMODE: require
+    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — the Neon meta-crm connection string, sslmode=verify-full}
+    # verify-full, not require: `require` encrypts but does NOT verify the server
+    # certificate, so it does not stop a MITM. The image ships a CA bundle
+    # (ca-certificates, /etc/ssl/certs/ca-certificates.crt), so verification works.
+    # This only applies if DATABASE_URL is ever absent — the URL's own sslmode wins.
+    POSTGRES_SSLMODE: verify-full
 
     # ── Redis: this stack's OWN container, for Sidekiq.
     # Separate from the platform's BullMQ Redis by design (D-033 §4): different
@@ -156,7 +162,7 @@ networks:
 # ── BRING-UP ────────────────────────────────────────────────────────────────
 # Migrations are a SEPARATE, deliberate step — nothing here migrates on boot.
 #
-#   docker build -t mesh-crm:production .
+#   docker build -f docker/Dockerfile -t mesh-crm:production .   # -f is REQUIRED
 #   docker compose -f docker-compose.prod.yaml run --rm rails \
 #     bundle exec rails db:chatwoot_prepare
 #   docker compose -f docker-compose.prod.yaml up -d

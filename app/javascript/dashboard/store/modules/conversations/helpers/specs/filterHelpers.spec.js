@@ -207,34 +207,36 @@ describe('filterHelpers', () => {
       expect(matchesFilters(conversation, filters)).toBe(true);
     });
 
-    it('should not match an AgentBot-owned conversation to a human assignee id', () => {
-      const conversation = {
-        meta: { assignee: { id: 1 }, assignee_type: 'AgentBot' },
-      };
-      const filters = [
-        {
-          attribute_key: 'assignee_id',
-          filter_operator: 'equal_to',
-          values: { id: 1, name: 'John Doe' },
-          query_operator: 'and',
-        },
-      ];
-      expect(matchesFilters(conversation, filters)).toBe(false);
-    });
+    ['AgentBot', 'Captain::Assistant'].forEach(assigneeType => {
+      it(`should not match a ${assigneeType}-owned conversation to a human assignee id`, () => {
+        const conversation = {
+          meta: { assignee: { id: 1 }, assignee_type: assigneeType },
+        };
+        const filters = [
+          {
+            attribute_key: 'assignee_id',
+            filter_operator: 'equal_to',
+            values: { id: 1, name: 'John Doe' },
+            query_operator: 'and',
+          },
+        ];
+        expect(matchesFilters(conversation, filters)).toBe(false);
+      });
 
-    it('should not match an AgentBot-owned conversation to a human assignee not-equal filter', () => {
-      const conversation = {
-        meta: { assignee: { id: 1 }, assignee_type: 'AgentBot' },
-      };
-      const filters = [
-        {
-          attribute_key: 'assignee_id',
-          filter_operator: 'not_equal_to',
-          values: { id: 1, name: 'John Doe' },
-          query_operator: 'and',
-        },
-      ];
-      expect(matchesFilters(conversation, filters)).toBe(false);
+      it(`should not match a ${assigneeType}-owned conversation to a human assignee not-equal filter`, () => {
+        const conversation = {
+          meta: { assignee: { id: 1 }, assignee_type: assigneeType },
+        };
+        const filters = [
+          {
+            attribute_key: 'assignee_id',
+            filter_operator: 'not_equal_to',
+            values: { id: 1, name: 'John Doe' },
+            query_operator: 'and',
+          },
+        ];
+        expect(matchesFilters(conversation, filters)).toBe(false);
+      });
     });
 
     it('should not match conversation with equal_to operator when assignee is null', () => {
@@ -1796,6 +1798,67 @@ describe('filterHelpers', () => {
         },
       ];
       expect(matchesFilters(conversation, filters)).toBe(false);
+    });
+  });
+
+  describe('date filters with a saved timezone', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it.each(['created_at', 'last_activity_at'])(
+      'compares %s against the local calendar day',
+      attributeKey => {
+        const filters = [
+          {
+            attribute_key: attributeKey,
+            filter_operator: 'is_less_than',
+            values: ['2026-09-08'],
+            timezone: 'America/Sao_Paulo',
+            query_operator: 'and',
+          },
+        ];
+
+        expect(
+          matchesFilters(
+            { [attributeKey]: Date.parse('2026-09-08T00:49:00Z') / 1000 },
+            filters
+          )
+        ).toBe(true);
+        expect(
+          matchesFilters(
+            { [attributeKey]: Date.parse('2026-09-08T03:00:00Z') / 1000 },
+            filters
+          )
+        ).toBe(false);
+      }
+    );
+
+    it('uses the local current date and timestamp date for days_before', () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-10T00:49:00Z'));
+      const filters = [
+        {
+          attribute_key: 'created_at',
+          filter_operator: 'days_before',
+          values: [1],
+          timezone: 'America/Sao_Paulo',
+          query_operator: 'and',
+        },
+      ];
+
+      expect(
+        matchesFilters(
+          { created_at: Date.parse('2026-09-08T00:49:00Z') / 1000 },
+          filters
+        )
+      ).toBe(true);
+      expect(
+        matchesFilters(
+          { created_at: Date.parse('2026-09-08T03:00:00Z') / 1000 },
+          filters
+        )
+      ).toBe(false);
     });
   });
 
