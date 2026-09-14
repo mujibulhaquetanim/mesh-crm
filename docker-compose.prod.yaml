@@ -31,7 +31,9 @@
 name: mesh-crm-prod
 
 x-app: &app
-  # Built from THIS repo, never pulled. `docker build -t mesh-crm:production .`
+  # Built from THIS repo, never pulled:
+  # `docker build -f docker/Dockerfile -t mesh-crm:production .`
+  # ⚠ `-f` is REQUIRED — there is no Dockerfile at the repo root.
   # — see docs/fork/DEV_SETUP.md for the build, which must run before this file.
   image: mesh-crm:production
   env_file: .env
@@ -156,7 +158,7 @@ networks:
 # ── BRING-UP ────────────────────────────────────────────────────────────────
 # Migrations are a SEPARATE, deliberate step — nothing here migrates on boot.
 #
-#   docker build -t mesh-crm:production .
+#   docker build -f docker/Dockerfile -t mesh-crm:production .   # -f is REQUIRED
 #   docker compose -f docker-compose.prod.yaml run --rm rails \
 #     bundle exec rails db:chatwoot_prepare
 #   docker compose -f docker-compose.prod.yaml up -d
