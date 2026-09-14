@@ -46,12 +46,14 @@ x-app: &app
     INSTALLATION_ENV: docker
     RAILS_LOG_TO_STDOUT: 'true'
 
-    # ── The database: Neon `meta-crm`. NOT the platform's `neondb`.
+    # ── The database: Neon `mesh-inbox`. NOT the platform's `mesh-api`.
+    # (Both projects live in eu-central-1/Frankfurt. They were `meta-crm` and
+    # `neondb` in ap-southeast-1 until 2026-09-14 — those names are dead.)
     #
     # ⚠ These are two different Neon databases and confusing them is
-    # destructive in both directions: `prisma migrate deploy` against meta-crm
+    # destructive in both directions: `prisma migrate deploy` against mesh-inbox
     # would apply the platform's schema over Chatwoot's, and Rails migrations
-    # against neondb would do the reverse. agentic-str's deploy.yml carries the
+    # against mesh-api would do the reverse. agentic-str's deploy.yml carries the
     # same warning from the other side.
     #
     # `DATABASE_URL` takes precedence over the individual POSTGRES_* params
@@ -59,7 +61,7 @@ x-app: &app
     # the single place the connection is decided. ⚠ `sslmode=verify-full` belongs on
     # the URL itself, not only in database.yml — an explicit DATABASE_URL
     # overrides that file's merge, and Neon refuses a non-SSL connection.
-    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — the Neon meta-crm connection string, sslmode=verify-full}
+    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — the Neon mesh-inbox connection string, sslmode=verify-full}
     # verify-full, not require: `require` encrypts but does NOT verify the server
     # certificate, so it does not stop a MITM. The image ships a CA bundle
     # (ca-certificates, /etc/ssl/certs/ca-certificates.crt), so verification works.
