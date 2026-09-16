@@ -6,8 +6,9 @@ Prints a summary. NEVER prints a value — the output is safe to paste anywhere.
   python3 scripts/make-prod-env.py .env \
       --db 'postgresql://…/mesh-inbox?sslmode=verify-full' \
       --frontend https://inbox.zasmate.com \
+      --dashboard-url https://zasmate.com \
       --r2-endpoint https://<ACCOUNT_ID>.r2.cloudflarestorage.com \
-      --r2-key <ACCESS_KEY_ID> --r2-secret <SECRET> --r2-bucket mesh-inbox-files
+      --r2-key <ACCESS_KEY_ID> --r2-secret <SECRET> --r2-bucket mesh-inbox
 
 Back up first (`cp .env .env.bak.localdev` — note `.env.bak*` is the gitignored
 shape; `.env.localdev.bak` is NOT ignored) and restore afterwards, or every later
@@ -21,6 +22,10 @@ ap.add_argument('--db', required=True, help='CRM_DATABASE_URL — the mesh-inbox
 ap.add_argument('--frontend', required=True, help='CRM_FRONTEND_URL — public https origin')
 ap.add_argument('--r2-endpoint'); ap.add_argument('--r2-key')
 ap.add_argument('--r2-secret');   ap.add_argument('--r2-bucket')
+ap.add_argument('--dashboard-url', default='',
+                help='public dashboard ORIGIN, e.g. https://zasmate.com. Sets EXTERNAL_LOGIN_URL, '
+                     'which is where an unauthenticated visitor to the inbox is bounced. Omit it '
+                     'and the dev value is carried through — see troubleshooting/425')
 ap.add_argument('--storage-local', action='store_true',
                 help='fall back to on-volume storage instead of R2 (see the warning it prints)')
 a = ap.parse_args()
@@ -35,6 +40,18 @@ NEW = {
     'CRM_DATABASE_URL': a.db,
     'CRM_FRONTEND_URL': a.frontend,
 }
+# ⚠ OWNED, not carried, since troubleshooting/425. This key drives
+# window.location.replace() for every unauthenticated visitor to the inbox, and
+# with ENABLE_SSO_ONLY_LOGIN=true it is the ONLY way in. Carried through from a
+# dev env it sent every tenant to a domain that no longer exists, while every
+# health check stayed green.
+#
+# ⚠ Setting it here is NOT sufficient on an already-seeded installation:
+# GlobalConfigService reads the `installation_configs` TABLE, which is seeded
+# from this env at db:chatwoot_prepare time. On an existing install you must also
+# update the row. The check in check-prod-env.py catches the env half.
+if a.dashboard_url:
+    NEW['EXTERNAL_LOGIN_URL'] = a.dashboard_url.rstrip('/') + '/login'
 r2 = [a.r2_endpoint, a.r2_key, a.r2_secret, a.r2_bucket]
 if a.storage_local:
     NEW['CRM_ACTIVE_STORAGE_SERVICE'] = 'local'

@@ -81,6 +81,39 @@ if len(sys.argv) > 2:
 else:
     warns.append("no dev .env given for comparison — rerun with a 2nd arg to catch secrets copied from the dev box")
 
+# ── stale-host detection ────────────────────────────────────────────────────
+# Two checks, and the ORDER OF IMPORTANCE is the opposite of the order they were
+# written in.
+#
+# ⚠ The pattern list below is an ENUMERATION OF KNOWN-BAD hosts, and it cannot
+# catch the one that actually shipped. `EXTERNAL_LOGIN_URL` reached production
+# holding `https://mesh-dash.mujibulhaquetanim.dev/login` — a dev DOMAIN, which
+# is none of localhost/127.0.0.1/trycloudflare/ngrok — and this file printed
+# "ok to ship". Every vendor who clicked the inbox was bounced to a dead host
+# while every health check stayed green (troubleshooting/425).
+#
+# So the primary test is now the INVERSE: every URL-valued key must point at a
+# host we expect in production. That excludes the next dev domain nobody has
+# thought of yet, which an allowlist of bad patterns structurally cannot.
+PROD_HOSTS = re.compile(r'(^|\.)(zasmate\.com|neon\.tech|r2\.cloudflarestorage\.com)$', re.I)
+URLISH = re.compile(r'^[a-z][a-z0-9+.-]*://([^/@\s]+@)?([^/:?\s]+)', re.I)
+
+foreign = []
+for k, v in sorted(env.items()):
+    if not v:
+        continue
+    m = URLISH.match(v)
+    if not m:
+        continue
+    host = m.group(2).split(':')[0]
+    if not PROD_HOSTS.search(host):
+        foreign.append(f"{k} -> {host}")
+if foreign:
+    fails.append("URL keys pointing at a host we do not expect in production "
+                 "(add it to PROD_HOSTS if it is legitimate): " + ", ".join(foreign))
+
+# Kept as a second, narrower signal. It names the failure more specifically when
+# it does fire, but it is no longer what the file relies on.
 LOCAL = re.compile(r'localhost|127\.0\.0\.1|0\.0\.0\.0|trycloudflare|ngrok|host\.docker')
 leaks = sorted(k for k, v in env.items() if v and LOCAL.search(v))
 if leaks: fails.append("LOCAL dev values would reach production: " + ", ".join(leaks))
