@@ -118,6 +118,57 @@ LOCAL = re.compile(r'localhost|127\.0\.0\.1|0\.0\.0\.0|trycloudflare|ngrok|host\
 leaks = sorted(k for k, v in env.items() if v and LOCAL.search(v))
 if leaks: fails.append("LOCAL dev values would reach production: " + ", ".join(leaks))
 
+# ── the same hole one level down: hosts with no scheme ─────────────────────
+# ⚠ URLISH requires `scheme://`. A BARE hostname never matches it, so neither
+# check above can see one — `SMTP_ADDRESS=mailhog` slips through both and mail
+# goes to a dev catcher that swallows it, which looks exactly like mail
+# working. Same class as ts/425: a check that only inspects the shape of value
+# it already expected.
+#
+# The compose service names are DERIVED from the compose file, not typed here,
+# so a service added later is covered without anyone remembering this file
+# exists. A single-label host that is NOT a service and NOT a production host
+# fails; one that IS a service warns, because internal wiring is legitimate and
+# only wrong when something outside the box has to resolve it.
+def compose_services(path='docker-compose.production.yaml'):
+    try:
+        text = open(path).read()
+    except OSError:
+        return set()
+    names, in_services = set(), False
+    for line in text.splitlines():
+        if re.match(r'^services:\s*$', line):
+            in_services = True
+            continue
+        if in_services and re.match(r'^[A-Za-z]', line):
+            break
+        m = re.match(r'^  ([a-z0-9_-]+):\s*$', line)
+        if in_services and m:
+            names.add(m.group(1))
+    return names
+
+HOST_KEY = re.compile(r'(_HOST|_HOSTNAME|_ADDRESS|_SERVER|_DOMAIN)$', re.I)
+SINGLE_LABEL = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$', re.I)
+SERVICES = compose_services()
+
+for k, v in sorted(env.items()):
+    if not v or not HOST_KEY.search(k) or '://' in v:
+        continue
+    host = v.split(':')[0].strip()
+    # Only single-label hosts. A dotted name (smtp.resend.com) is a plausible
+    # public host and is left to the two checks above; a single label cannot
+    # resolve anywhere but the compose network.
+    if not SINGLE_LABEL.match(host):
+        continue
+    if host in SERVICES:
+        warns.append(f"{k}={host} is a compose service. Correct for internal wiring, "
+                     "wrong for anything a browser or a third party must resolve.")
+    else:
+        fails.append(f"{k}={host} is a BARE hostname — no scheme, so URLISH and the "
+                     "LOCAL pattern both skip it. A single label resolves only inside "
+                     "the compose network (SMTP_ADDRESS=mailhog is the shape: mail is "
+                     "swallowed by a dev catcher and looks delivered).")
+
 print(f"checked {len(env)} keys in {path}\n")
 for f in fails: print("  FAIL ", f)
 for w in warns: print("  warn ", w)
