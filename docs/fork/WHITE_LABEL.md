@@ -202,3 +202,79 @@ Deferred:
   `Chatwoot <accounts@chatwoot.com>`).
 - Captain empty-state help content and Twilio template demo payloads — link to
   external Chatwoot docs / are sample data; leave until content is reworked.
+
+---
+
+## Status — real brand artwork, renamed to Zasmate (2026-09-22)
+
+The 2026-08-23 pass above shipped a *placeholder*: a violet circle with a
+lettered "M", explicitly standing in "pending brand image files". Those files
+arrived, so this pass replaces the placeholder with the real mark and takes the
+product name with it — the artwork reads ZASMATE, and the install already serves
+from `zasmate.com`.
+
+Everything raster is now **generated, not drawn**:
+`scripts/brand/generate-icons.sh` derives every icon from the two masters in
+`docs/brand/`. Re-running it is the supported way to refresh the set; editing a
+PNG by hand will be silently overwritten the next time anyone does.
+
+Two things about that pipeline are worth knowing, because both fail *silently* —
+they produce valid PNGs of the right size with an alpha channel, and look fine
+until someone opens them:
+
+- **Lift the artwork with a floodfill, never `-transparent`.** The masters sit
+  on an opaque `#F7F7F7` field. `-fuzz 12% -transparent '#F7F7F7'` matches that
+  colour globally, and the logo's "Z" and the speech-bubble interior are the
+  same near-white — so they go transparent too and the logo has a hole where its
+  letter should be. Measured: 30% opaque against 69% for an edge-connected
+  floodfill.
+- **`logo_dark.svg` is a different file, not a CSS filter.** The lockup's
+  tagline is near-black navy and vanishes on a dark surface. Repainting it by
+  luminance alone also pales out the mark's navy orbit dot (its core is 24.7%
+  luma — darker than it looks), so the recolour is gated *geometrically* too, on
+  the run of transparent columns between mark and text. The generator finds that
+  gap rather than assuming it.
+
+`spec/brand/brand_assets_spec.rb` guards the output by counting pixels that are
+near-white **and** opaque — the white Z is what disappears, so the white Z is
+what gets counted. A correct build measures 8–12% depending on size; the broken
+one measures exactly 0. Verified red on the naive recipe before being trusted.
+
+Shipped in this pass:
+
+- `public/brand-assets/logo.svg`, `logo_dark.svg`, `logo_thumbnail.svg` — the
+  real mark. Still `.svg` because `config/installation_config.yml` points at
+  those paths, but the payload is now a base64 PNG in an `<image>` element. The
+  login views size the logo `w-auto h-8`, so the aspect change is free.
+- All 30 root-level icons regenerated at their exact original dimensions —
+  including `ms-icon-144x144.png`, which the layout uses as
+  `msapplication-TileImage` and which the 2026-08-23 list missed.
+- `public/apple-touch-icon.png` and `-precomposed.png` — **were 0 bytes**. The
+  previous pass left them as "unreferenced by any `<link>`", which is true but
+  not the whole story: Safari probes `/apple-touch-icon.png` by convention when
+  no tag matches, and caches what it gets, so an empty body is worse than a 404.
+  Now 180×180.
+- `config/installation_config.yml` — `INSTALLATION_NAME` and `BRAND_NAME` were
+  **still `'Chatwoot'`**, and `BRAND_URL`/`WIDGET_BRAND_URL` still pointed at
+  `chatwoot.com`. All four now Zasmate. These were on the Deferred list above.
+- `app/views/layouts/vueapp.html.erb` — the inline `#2781F6` `theme-color` and
+  `msapplication-TileColor`, which the last pass deliberately left.
+- `app/javascript/dashboard/components-next/icon/Logo.vue` — the inline fallback
+  SVG was **Chatwoot's own blue bubble**, rendered whenever `LOGO_THUMBNAIL` is
+  unset. An install that lost its config fell back to someone else's brand.
+- `public/manifest.json` — name/short_name, and the theme colours off the
+  placeholder violet onto the artwork's cyan `#19A6D3`.
+- 48 "Mesh CRM" strings across 23 i18n and Vue files.
+
+Not touched, deliberately:
+
+- **`#2781F6` elsewhere** — email templates, the portal-colour default, the Dyte
+  bubble, label suggestions. That is an accent colour, not the logo; recolouring
+  it is a theme change and wants its own pass.
+- **`public/browserconfig.xml`** — its `<TileColor>` is `#ffffff`, not Chatwoot
+  blue, and the `msapplication-TileColor` meta tag overrides it on the live page
+  anyway.
+- **The DB.** `INSTALLATION_NAME`, `BRAND_NAME` and the `LOGO*` paths are
+  `InstallationConfig` ROWS; this YAML only seeds a fresh install. A running
+  instance keeps whatever is in its table until those rows are updated. See
+  `docs/fork/REBRAND_PRODUCTION.md`.

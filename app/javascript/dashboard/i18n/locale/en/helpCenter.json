@@ -860,7 +860,7 @@
       "CONFIRM_BUTTON_LABEL": "Create",
       "NAME": {
         "LABEL": "Name",
-        "PLACEHOLDER": "User Guide | Mesh CRM",
+        "PLACEHOLDER": "User Guide | Zasmate",
         "MESSAGE": "Choose an name for your portal.",
         "ERROR": "Name is required"
       },

@@ -19,6 +19,7 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-09-22 — `-transparent` matched the logo's own white and punched the Z out of it: a valid, correctly-sized PNG you can see straight through](./2026-09-22-transparent-matches-globally-and-punches-out-the-logo.md)
 - [2026-09-14 — Devise pre-empts `Custom::ProductionSecretsGuard`: a missing `SECRET_KEY_BASE` raises in `run_initializers`, several phases before `after_initialize`](./2026-09-14-devise-preempts-the-production-secrets-guard.md)
 - [2026-09-14 — Production booted happily with Active Record encryption unconfigured (every channel token in plaintext), and a naive guard would have broken `docker build` instead](./2026-09-14-production-booted-happily-with-encryption-unconfigured.md)
 - [2026-08-23 — Login/SSO screens still showed the Chatwoot logo after account creation (Layer 3 brand assets, deferred, now shipped)](./2026-08-23-login-sso-still-shows-chatwoot-logo.md)

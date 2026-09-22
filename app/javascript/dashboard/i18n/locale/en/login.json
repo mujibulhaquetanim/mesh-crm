@@ -1,6 +1,6 @@
 {
   "LOGIN": {
-    "TITLE": "Login to Mesh CRM",
+    "TITLE": "Login to Zasmate",
     "EMAIL": {
       "LABEL": "Email",
       "PLACEHOLDER": "example{'@'}companyname.com",
