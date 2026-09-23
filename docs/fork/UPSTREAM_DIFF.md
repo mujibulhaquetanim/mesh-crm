@@ -232,7 +232,7 @@ Everything here is net-new; pulling upstream can never conflict with it.
     §4.1; see that section for why the two go together.
 - **`config/initializers/custom_prepends.rb`** (net-new, previously
   undocumented here) — the fourth undocumented overlay file this pass found.
-  Three classes ship with no `prepend_mod_with` hook of their own, so this
+  Four classes ship with no `prepend_mod_with` hook of their own, so this
   initializer prepends onto them directly, inside `to_prepare` (so the
   prepend survives Zeitwerk reloading in development) and through
   `Custom::PrependOnce` (so that reloading does not STACK the overlay — a
@@ -249,6 +249,12 @@ Everything here is net-new; pulling upstream can never conflict with it.
     (mandatory Meta signature, §2 above). Reloadable target; entered here
     rather than as a §3 hook line precisely so the signature hardening costs
     **zero** upstream edits.
+  - `ChatwootFbProvider` ← `Custom::FacebookMessengerVerifyToken`
+    (Messenger webhook handshake on `GET /bot`: the token Meta sends must
+    equal `FB_VERIFY_TOKEN`, compared in constant time; an unset token rejects
+    every handshake). Non-reloadable target: the class is defined inside
+    `config/initializers/facebook_messenger.rb`, not autoloaded, so there is
+    no hook to use. Spec: `spec/custom/initializers/facebook_messenger_verify_token_spec.rb`.
 
   Every other customization in this fork resolves through an upstream-supplied
   hook (§3); these are the classes where the fork had to add the hook

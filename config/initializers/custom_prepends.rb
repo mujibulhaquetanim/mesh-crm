@@ -54,4 +54,15 @@ Rails.application.config.to_prepare do
     Devise::PasswordsController,
     Custom::DeviseOverrides::SuperAdminPasswordsGuard
   )
+
+  # Messenger webhook subscription handshake (GET /bot): the token Meta sends
+  # must equal FB_VERIFY_TOKEN (constant-time; unset rejects everything). See
+  # custom/app/services/custom/facebook_messenger_verify_token.rb.
+  #
+  # Non-reloadable target: ChatwootFbProvider is defined inside
+  # config/initializers/facebook_messenger.rb, not autoloaded.
+  Custom::PrependOnce.call(
+    ChatwootFbProvider,
+    Custom::FacebookMessengerVerifyToken
+  )
 end
