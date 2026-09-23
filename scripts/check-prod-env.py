@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Preflight for /srv/mesh-crm/.env before scp. Prints PASS/FAIL only, never values."""
-import re, sys
+import os, re, sys
 
 path = sys.argv[1] if len(sys.argv) > 1 else '.env'
 env = {}
@@ -130,10 +130,22 @@ if leaks: fails.append("LOCAL dev values would reach production: " + ", ".join(l
 # exists. A single-label host that is NOT a service and NOT a production host
 # fails; one that IS a service warns, because internal wiring is legitimate and
 # only wrong when something outside the box has to resolve it.
-def compose_services(path='docker-compose.production.yaml'):
+#
+# ⚠ The file is the one the BOX runs: docker-compose.prod.yaml (project
+# mesh-crm-prod; first-deploy-guide step 7b), resolved from this script's own
+# location. It used to be `docker-compose.production.yaml` relative to the
+# CURRENT directory, so run from anywhere else it found no services at all,
+# and run from the agentic-str checkout (push-box-env.py does that) it read
+# the OTHER repo's compose file. .production.yaml also defines `postgres`,
+# which the box does not run (Neon), so `postgres` counted as a service there.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def compose_services(path=os.path.join(REPO_ROOT, 'docker-compose.prod.yaml')):
     try:
         text = open(path).read()
     except OSError:
+        warns.append(f"{path} not found, so no compose service is recognised: every "
+                     "single-label host below FAILs, including legitimate ones.")
         return set()
     names, in_services = set(), False
     for line in text.splitlines():
@@ -149,6 +161,10 @@ def compose_services(path='docker-compose.production.yaml'):
 
 HOST_KEY = re.compile(r'(_HOST|_HOSTNAME|_ADDRESS|_SERVER|_DOMAIN)$', re.I)
 SINGLE_LABEL = re.compile(r'^[a-z0-9]([a-z0-9-]*[a-z0-9])?$', re.I)
+# A flag or a count, never a host. `ENABLE_PUSH_RELAY_SERVER=true` ends in
+# _SERVER like a host key and `true` is a legal DNS label, so it FAILed as a
+# bare hostname on the production box (troubleshooting 443).
+NOT_A_HOST = re.compile(r'^(true|false|yes|no|on|off|\d+)$', re.I)
 SERVICES = compose_services()
 
 for k, v in sorted(env.items()):
@@ -158,7 +174,7 @@ for k, v in sorted(env.items()):
     # Only single-label hosts. A dotted name (smtp.resend.com) is a plausible
     # public host and is left to the two checks above; a single label cannot
     # resolve anywhere but the compose network.
-    if not SINGLE_LABEL.match(host):
+    if not SINGLE_LABEL.match(host) or NOT_A_HOST.match(host):
         continue
     if host in SERVICES:
         warns.append(f"{k}={host} is a compose service. Correct for internal wiring, "
