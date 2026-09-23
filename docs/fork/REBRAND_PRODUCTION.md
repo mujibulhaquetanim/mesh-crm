@@ -3,6 +3,16 @@
 Merging the rebrand does not change a running install. This file is the part
 that does.
 
+> **Applied to production 2026-09-24** (all six keys below, read back from a
+> fresh process; `<title>Zasmate</title>` served). It had NOT been run before:
+> the box showed "Chatwoot" in the window title, and Captain / SLA / Custom
+> Roles as locked upsells, for ten days after the branch merged.
+>
+> ⚠ **The artwork is a separate step.** The box's image (`mesh-crm:production`,
+> built 2026-09-14) predates the #37 artwork, so `/brand-assets/logo.svg`
+> still serves the old file. That needs an image rebuild, and a rebuild comes
+> AFTER an upstream sync (`UPSTREAM_SYNC.md`), never before.
+
 ## Why a deploy is not enough
 
 `config/installation_config.yml` is a **seed**, not configuration.
@@ -18,6 +28,13 @@ So after this branch deploys, a pre-existing instance still shows:
 | `BRAND_NAME` | `Chatwoot` | `Zasmate` |
 | `BRAND_URL` | `https://www.chatwoot.com` | `https://zasmate.com` |
 | `WIDGET_BRAND_URL` | `https://www.chatwoot.com` | `https://zasmate.com` |
+| `TERMS_URL` | `https://www.chatwoot.com/terms-of-service` | `https://zasmate.com/legal/terms` |
+| `PRIVACY_URL` | `https://www.chatwoot.com/privacy-policy` | `https://zasmate.com/legal/privacy` |
+
+The last two were missing from this table and the command below until
+2026-09-24, so the first run of this runbook would have left the login page's
+legal links on chatwoot.com. They are seeds too; the YAML fix never reached a
+running box.
 
 `INSTALLATION_NAME` is the one that matters most: it is the dashboard title, the
 TOTP issuer an authenticator app files the vendor's account under, and — per the
@@ -44,7 +61,9 @@ bundle exec rails runner '
   { "INSTALLATION_NAME" => "Zasmate",
     "BRAND_NAME"        => "Zasmate",
     "BRAND_URL"         => "https://zasmate.com",
-    "WIDGET_BRAND_URL"  => "https://zasmate.com" }.each do |name, value|
+    "WIDGET_BRAND_URL"  => "https://zasmate.com",
+    "TERMS_URL"         => "https://zasmate.com/legal/terms",
+    "PRIVACY_URL"       => "https://zasmate.com/legal/privacy" }.each do |name, value|
     config = InstallationConfig.find_by(name: name)
     if config.nil?
       warn "MISSING #{name} — ConfigLoader never seeded it; investigate before continuing"
@@ -65,7 +84,7 @@ explicit call is belt-and-braces; it costs nothing and makes the step readable.
 `ConfigLoader.new.process(reconcile_only_new: false)` would also do it, and it
 is the wrong tool: that flag overwrites **every** config row with its YAML
 default, including the ones an operator set deliberately through super-admin —
-SMTP, Captain keys, feature toggles. Four targeted updates cannot do that.
+SMTP, Captain keys, feature toggles. Six targeted updates cannot do that.
 
 ## Verify — read it back from a new process
 
@@ -74,7 +93,7 @@ proves nothing about what a web worker will serve.
 
 ```sh
 bundle exec rails runner '
-  %w[INSTALLATION_NAME BRAND_NAME BRAND_URL WIDGET_BRAND_URL].each do |k|
+  %w[INSTALLATION_NAME BRAND_NAME BRAND_URL WIDGET_BRAND_URL TERMS_URL PRIVACY_URL].each do |k|
     puts format("%-18s %s", k, GlobalConfig.get(k)[k])
   end
 '
