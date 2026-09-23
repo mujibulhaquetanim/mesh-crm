@@ -748,6 +748,56 @@ note: the **full** upstream suite was not run.
 
 ---
 
+## 3g. v4.17.1 → v4.18.0: one class-C string, and the prepend targets re-checked (2026-09-24)
+
+61 upstream commits. The §3e candidate set measured **17** files; **one**
+conflicted: `app/javascript/dashboard/i18n/locale/en/generalSettings.json`.
+It was class C: upstream reworded `PAYMENT_PENDING` and added
+`PAYMENT_PENDING_AGENT` (read by new code), while the fork had branded
+`UPGRADE` / `LIMITS_UPGRADE`, which upstream still hardcodes as "Chatwoot".
+Kept both: upstream's text and new key, plus the fork's "Zasmate".
+
+### Checks (§3b / §3e), all before commit
+
+- **Overlay overlap:** `devise_overrides/sessions_controller.rb`,
+  `campaign.rb`, `channel/facebook_page.rb`.
+  - Upstream reworked `SessionsController#create` (new `DeviceVerificationGuard`,
+    with a users migration). `Custom::DeviseOverrides::SessionsController`
+    only uses `create` + `sso_authentication_request?`, and both still
+    exist; it calls `super` into the new `create`.
+  - The other two overlays add their own hooks; upstream's edits (a campaign
+    scheduling guard, the `messaging_postbacks` subscription field) do not
+    touch them.
+- **`custom_prepends.rb` targets:** these are not covered by the overlap
+  loop, because their overlays do not mirror an upstream path. Check them by
+  hand every sync. `config/initializers/facebook_messenger.rb` changed
+  upstream (a `:postback` handler was added); `ChatwootFbProvider` and
+  `valid_verify_token?` are unchanged, so `Custom::FacebookMessengerVerifyToken`
+  still binds. `Webhooks::WhatsappController` and
+  `AssignableAgentsController` were not touched upstream.
+- **Branding:** `grep -ci chatwoot` over `en/*.json`, unchanged per file.
+- **`db/schema.rb`:** merged cleanly at upstream's `2026_09_17_000000`;
+  `index_channel_facebook_pages_on_page_id_unique` present.
+- **Spec baseline:** `spec/custom` 267/0 before, 267/0 after (with
+  `bundle install` + `db:schema:load`; `Gemfile.lock`, `package.json` and
+  `pnpm-lock.yaml` all changed upstream).
+
+### Migrations this brings to production
+
+- `20260907092035_add_assistant_to_captain_custom_tools`
+- `20260907092039_backfill_captain_custom_tool_assistants`
+- `20260917000000_add_device_trust_version_to_users`
+
+### Audit trail
+
+| Thing | SHA |
+|---|---|
+| merge-base | `f452298a8f` |
+| `upstream/develop` tip merged in | `e87cea84d2` |
+| the merge commit (sync branch) | `9b541821b2` |
+
+---
+
 ## 4. The guards that stop you pushing fork code into Chatwoot
 
 Two guards were installed on **2026-07-08** so your project code can never
