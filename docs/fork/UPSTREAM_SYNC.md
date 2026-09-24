@@ -851,6 +851,57 @@ None.
 
 ---
 
+## 5b. Paid-only surfaces must stay hidden (every sync AND every rebuild)
+
+**Why:** the image ships `enterprise/` (the fork's quota layer is built on it),
+so `ChatwootApp.enterprise?` is true while the plan is `community`: no
+licence, so no premium feature may be used. The frontend decides a lot of
+visibility from `isEnterprise` alone. The v4.18.0 sync (2026-09-24) added a
+**Calls** sidebar entry gated on nothing else, and **Settings → Security**
+was showing a SAML stub. The owner found both on production
+(error-log `2026-09-24-paid-only-surfaces-visible-on-the-community-plan.md`).
+
+**The mechanism:** `Custom::DashboardController` reports `IS_ENTERPRISE=false`
+to the frontend on the `community` plan. Upstream's own community-edition
+paths then hide every enterprise surface, including ones a future sync adds.
+The backend keeps `enterprise?` true, so quotas keep working. Do **not**
+"fix" a leak by enabling the feature: see `enterprise/LICENSE`.
+
+**Run all three, in order:**
+
+1. **Before building**, the overlay spec (it fails if the overlay stops
+   binding or upstream renames `app_config`):
+
+   ```sh
+   docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test \
+     sh -c "bundle install && bundle exec rails db:create db:schema:load && \
+            bundle exec rspec spec/custom/controllers/dashboard_controller_spec.rb"
+   ```
+
+2. **Before building**, look for NEW visibility checks that bypass
+   `isEnterprise` (these are the only ones the overlay can't catch):
+
+   ```sh
+   git diff <merge-base> upstream/develop -- app/javascript \
+     | grep -E '^\+.*(isOnChatwootCloud|enterprisePlanName|PREMIUM_FEATURES|installationTypes)' 
+   ```
+
+   For each hit, check what it shows on a self-hosted, custom-branded,
+   community-plan install. If it's a paid feature shown anyway, hide it with a
+   `custom/` overlay (or its route meta's `featureFlag`) before building.
+
+3. **After the box runs the new image**, check from outside. It must print
+   `'false'`:
+
+   ```sh
+   curl -s https://inbox.zasmate.com/app/login | grep -o "isEnterprise: '[a-z]*'"
+   ```
+
+   Then sign in as a vendor administrator and compare the sidebar and the
+   Settings list with the previous release. Any NEW entry must be a
+   community feature. The ones that must never appear are Captain, Calls,
+   and Settings → Security / SLA / Audit logs / Custom roles.
+
 ## 4. The guards that stop you pushing fork code into Chatwoot
 
 Two guards were installed on **2026-07-08** so your project code can never

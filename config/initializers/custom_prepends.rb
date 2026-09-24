@@ -74,4 +74,13 @@ Rails.application.config.to_prepare do
     Instagram::CallbacksController,
     Custom::Instagram::CallbacksController
   )
+
+  # Dashboard boot config: on the `community` plan, report IS_ENTERPRISE=false
+  # to the frontend so enterprise-only surfaces (Calls, Security/SAML, …) are
+  # hidden instead of shown unlicensed. See
+  # custom/app/controllers/custom/dashboard_controller.rb.
+  Custom::PrependOnce.call(
+    DashboardController,
+    Custom::DashboardController
+  )
 end
