@@ -7,13 +7,13 @@ require 'rails_helper'
 # spec/controllers/dashboard_controller_spec.rb 500s there for the same reason).
 # `vueapp.html.erb` renders `isEnterprise: '<%= IS_ENTERPRISE %>'` verbatim, so
 # the hash value IS what the frontend receives.
-RSpec.describe 'DashboardController (fork IS_ENTERPRISE on the community plan)' do
-  let(:app_config) { DashboardController.new.send(:app_config) }
+RSpec.describe DashboardController do
+  let(:app_config) { described_class.new.send(:app_config) }
 
   before { allow(ChatwootApp).to receive(:enterprise?).and_return(true) }
 
   it 'is prepended onto DashboardController' do
-    expect(DashboardController.ancestors).to include(Custom::DashboardController)
+    expect(described_class.ancestors).to include(Custom::DashboardController)
   end
 
   it 'reports IS_ENTERPRISE=false on the community plan' do
