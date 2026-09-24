@@ -35,6 +35,7 @@ meta-saas contract's open question "confirm your signature scheme" is answered:
 - **meta-saas had:** `subscriptions: ["message_created","conversation_resolved","conversation_status_changed"]` (its endpoint #16).
 - **Chatwoot reality:** `Webhook::ALLOWED_WEBHOOK_EVENTS` (`app/models/webhook.rb:32`) has **no** `conversation_resolved` — it is a reporting event only. `validate_webhook_subscriptions` rejects the array → **422, webhook never created, AI loop silently broken.**
 - **Resolution:** subscribe to `["message_created","conversation_status_changed"]`; detect resolution from `conversation_status_changed` where `status == "resolved"` (meta-saas already handles this in its ingest). **Change the subscription array in `chatwoot-api.adapter.ts`.**
+- **Since then:** the platform also subscribes `message_updated` (the delivery/read readback, U6b), so the array today is `["message_created","message_updated","conversation_status_changed"]`, and all three are in `ALLOWED_WEBHOOK_EVENTS`. Accounts provisioned before that keep two events; re-subscribing means delete-and-recreate, which rotates the signing secret, so there is no sweep yet (agentic-str `chatwoot-api.adapter.ts`).
 
 ### 2.2 🟢 AI reply identity: platform-managed `role: agent` user — ADR-0006 (was ADR-0002)
 

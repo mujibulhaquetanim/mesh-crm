@@ -943,6 +943,10 @@ git merge --no-ff upstream/develop     # conflicts ⊆ the list above, see §2:
                                        #  B) an OSS file the fork branded -> usually take upstream (§3b)
 git commit --no-edit
 # then verify the overlay still binds + no branding regressions (§3b)
+# and look for NEW Captain flags upstream added. Each default-off one must be
+# forced false by the platform (agentic-str chatwoot-features.ts, whose spec pins
+# the exact set). captain_classifier slipped through once (agentic-str ts/450):
+rg -n --color=never "name: captain" config/features.yml
 git push origin develop                # fork only
 ```
 

@@ -304,8 +304,13 @@ resources* (agent bots) still hit model-level guards.
 
 The control plane's agent is the only reply authority on a platform-run account
 (agentic-str ADR-0006). That is why plan sync force-disables Chatwoot Captain
-(`captain_integration`, `captain_integration_v2`, `captain_v1_action_classifier`
-— all pushed as explicit `false`) and caps `agent_bots` at 0.
+(`captain_integration`, `captain_integration_v2`, `captain_v1_action_classifier`,
+`captain_classifier` and `captain_document_auto_sync`, all pushed as explicit
+`false`) and caps `agent_bots` at 0. `captain_classifier` arrived in the
+2026-09-24 upstream sync (#42) and was added on the platform side in agentic-str
+#399. It gates label/priority suggestions that send conversation text to
+Captain's model endpoint. `captain_tasks` is **not** forced: upstream defaults
+it on and it gates human-agent assists, which is the owner's call.
 
 `automation_rules` is deliberately **not** capped at 0: the useful half of
 automations is routing (`assign_agent`, `assign_team`, `add_label`,
