@@ -798,6 +798,59 @@ Kept both: upstream's text and new key, plus the fork's "Zasmate".
 
 ---
 
+## 3h. Four commits: a security fix, and Companies moved into core (2026-09-24)
+
+4 upstream commits (`e87cea84d2` → `cdfaa255dc`), 78 files, +823/−241. The
+§3e candidate set measured **one** file, `en/conversation.json`, and it
+auto-merged: upstream reworded `OLDER`/`NEWER` and added five keys near line
+35, while the fork's "Reply from Zasmate" edit sits near line 362.
+
+| Upstream commit | What it is |
+| --- | --- |
+| `778fc6fa37` | **Security:** escapes mention labels and sanitizes the article diff panel |
+| `af1969a731` | Twilio voice: API-key credentials for recordings and outbound calls (unused here) |
+| `0466fe91e5` | Reading mode for older conversations |
+| `cdfaa255dc` | Companies CRM moved from `enterprise/` into core, `enabled: true`, no longer premium |
+
+### Checks, all before the PR
+
+- **Overlay overlap (§3b loop):** none. **`custom_prepends.rb` targets**
+  (`AssignableAgentsController`, `Webhooks::WhatsappController`,
+  `Devise::PasswordsController`, the Messenger verify-token provider):
+  upstream touched none of their files.
+- **Autoload:** `rails zeitwerk:check` printed "All is good!". Worth running
+  on this sync because upstream renamed 42 files out of `enterprise/`.
+- **Branding:** `grep -ci chatwoot` over `en/*.json`, unchanged in all 48 files.
+- **Untouched by upstream:** `db/schema.rb`, `Gemfile.lock`, `package.json`,
+  `pnpm-lock.yaml`. `index_channel_facebook_pages_on_page_id_unique` present.
+- **Specs:** `spec/custom` 267/0 before. After: `spec/custom` plus upstream's moved `company_spec`, `companies_controller_spec` and `contacts_company_spec`, 311/0 (no `bundle install` changes: the lockfiles were untouched).
+
+### Companies does NOT switch on for production accounts
+
+`features.yml` now says `companies: enabled: true`, but new accounts take
+their defaults from the `ACCOUNT_LEVEL_FEATURE_DEFAULTS` row
+(`Featurable#enable_default_features`), not from the YAML. `ConfigLoader`
+rebuilds that row after `db:migrate` with `reconcile_only_new: true`, which
+keeps any entry already present (`(config.value + account_features).uniq`).
+`companies` was already in the YAML as `enabled: false`, so a long-running
+installation keeps it off for new accounts. Only a brand-new installation seeds
+it as on. This was derived from `lib/config_loader.rb`, not by reading the
+production row. Enable it per account from super admin if a vendor wants it.
+
+### Migrations this brings to production
+
+None.
+
+### Audit trail
+
+| Thing | SHA |
+|---|---|
+| merge-base | `e87cea84d2` |
+| `upstream/develop` tip merged in | `cdfaa255dc` |
+| the merge commit (sync branch) | `cef618f79d` |
+
+---
+
 ## 4. The guards that stop you pushing fork code into Chatwoot
 
 Two guards were installed on **2026-07-08** so your project code can never
