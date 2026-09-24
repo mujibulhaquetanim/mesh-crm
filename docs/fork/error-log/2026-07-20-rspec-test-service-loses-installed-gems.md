@@ -109,3 +109,27 @@ docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test
 - Do not "fix" this by pointing `BUNDLE_PATH` at `/usr/local/bundle`: that is
   `GEM_HOME` (bundler's own install location) and the image deliberately keeps
   application gems separate in `/gems`.
+
+## Recurrence, 2026-09-24
+
+Running one spec file directly, without the `bundle install` prefix:
+
+```text
+bundler: failed to load command: rspec (/gems/ruby/3.4.0/bin/rspec)
+… Could not find tzinfo-data-1.2026.4 in locally installed gems (Bundler::GemNotFound)
+```
+
+Same cause as above: the `test` service starts from the image's gem set, and the
+lock had moved past it. The fix is the documented command form, which is
+**always** `bundle install` first:
+
+```bash
+docker compose -f docker-compose.yaml -f docker-compose.rspec.yaml run --rm test \
+  sh -c "bundle install >/dev/null && bundle exec rspec <paths>"
+```
+
+With it, the same run passed (`spec/custom` 270/0). A trap in the fix: with
+output redirected to a log and filtered by `grep`, the GemNotFound produced **no
+matching lines**, so the run looked silent rather than failed. Read the exit
+code and the log's tail, not a filtered grep.
+
