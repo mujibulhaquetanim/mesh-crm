@@ -126,3 +126,21 @@ Read in this order:
    renders the four secret-shaped `provider_config` keys — see
    [UPSTREAM_DIFF.md §4.2](./UPSTREAM_DIFF.md#42-the-one-app-views-edit-inboxjsonjbuilder).
    Removing a field still needs that bar.
+6. **Paid-only features stay HIDDEN, never unlocked.** Everything under
+   `enterprise/` falls under `enterprise/LICENSE`: production use needs a paid
+   Chatwoot Enterprise licence, and this installation is on the `community`
+   plan. Never flip a plan check, a `premium` flag or `INSTALLATION_PRICING_PLAN`
+   to make one work. The dashboard is told `IS_ENTERPRISE=false` on the
+   community plan (`custom/app/controllers/custom/dashboard_controller.rb`),
+   which hides every enterprise-only surface at once. Captain is also forced
+   off per account by the platform (agentic-str `chatwoot-features.ts`),
+   because the platform's own agent is the only AI.
+   **After every upstream sync and every image rebuild, run
+   [UPSTREAM_SYNC.md §5b](./UPSTREAM_SYNC.md).** The 2026-09-24 sync shipped an
+   ungated "Calls" entry, and the owner found it before any check did.
+7. **Nothing that conflicts with an upstream sync.** Fork changes go in
+   fork-only files (`custom/`, `spec/custom/`, `docs/fork/`,
+   `config/initializers/custom_prepends.rb`). Before committing, check every
+   touched path with `git cat-file -e upstream/develop:<path>`. A hit means the
+   change belongs in an overlay instead. The few sanctioned exceptions are
+   listed in UPSTREAM_DIFF.md.
