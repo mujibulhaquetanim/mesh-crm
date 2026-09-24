@@ -3,10 +3,19 @@
 Merging the rebrand does not change a running install. This file is the part
 that does.
 
-> **Applied to production 2026-09-24** (all six keys below, read back from a
-> fresh process; `<title>Zasmate</title>` served). It had NOT been run before:
-> the box showed "Chatwoot" in the window title, and Captain / SLA / Custom
-> Roles as locked upsells, for ten days after the branch merged.
+> **Applied to production 2026-09-24, but to the WRONG database.** The page
+> served `<title>Zasmate</title>` for a day, then went back to "Chatwoot".
+> The run had filled the shared Redis cache with "Zasmate" from a database
+> the web container doesn't read. When the cache expired (after 1 day,
+> `GlobalConfig::DEFAULT_EXPIRY`), the web container loaded its own row,
+> still "Chatwoot". **Re-applied 2026-09-25 through the running container**
+> (`exec -T rails`, db host `ep-aged-bonus-…`): `before: "Chatwoot"`, then all
+> six set, `<title>Zasmate</title>` from outside. Error log:
+> `2026-09-25-rebrand-written-to-the-wrong-database.md`.
+>
+> It had NOT been run at all before 2026-09-24: the box showed "Chatwoot" in
+> the window title, and Captain / SLA / Custom Roles as locked upsells, for ten
+> days after the branch merged.
 >
 > ⚠ **The artwork is a separate step.** The box's image (`mesh-crm:production`,
 > built 2026-09-14) predates the #37 artwork, so `/brand-assets/logo.svg`
@@ -54,6 +63,23 @@ migration). The stored shape is therefore not the JSON it looks like, and an
 `UPDATE ... SET serialized_value = '{"value":"Zasmate"}'` produces a row that
 reads back wrong. Go through the model.
 
+## Where to run it: the RUNNING web container, nothing else
+
+```sh
+cd /srv/mesh-crm
+docker compose -f docker-compose.prod.yaml exec -T rails bundle exec rails runner '…'
+```
+
+- **`exec` into the running `rails` container.** It's the one process whose
+  `DATABASE_URL` is guaranteed to be the database the website reads. A
+  `docker compose run` without `-f docker-compose.prod.yaml` uses the fork's
+  default `docker-compose.yaml`, which has a different database. That is how
+  the 2026-09-24 run went wrong.
+- **Print the database host first.** The one-liner used on 2026-09-25 does
+  this: `ActiveRecord::Base.connection_db_config.configuration_hash[:host]`,
+  first label only. It must be the `mesh-inbox` Neon endpoint.
+- **Print each value before and after**, so the run shows what it changed.
+
 ## The change
 
 ```sh
@@ -87,6 +113,19 @@ default, including the ones an operator set deliberately through super-admin —
 SMTP, Captain keys, feature toggles. Six targeted updates cannot do that.
 
 ## Verify — read it back from a new process
+
+⚠ **A page check right after the run proves nothing on its own.** The run
+refreshes a Redis cache that the web container also reads, for a day. The
+2026-09-24 run passed its `<title>` check while the row the site reads still
+said "Chatwoot". Verify the **row, through the web container**:
+
+```sh
+docker compose -f docker-compose.prod.yaml exec -T rails bundle exec rails runner \
+  'puts InstallationConfig.find_by(name: %q(INSTALLATION_NAME)).value'
+# expect: Zasmate
+```
+
+The page check below is still worth doing, but only after this.
 
 The cache is per-process, so checking in the same console that wrote the values
 proves nothing about what a web worker will serve.
