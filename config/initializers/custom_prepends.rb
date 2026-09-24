@@ -65,4 +65,13 @@ Rails.application.config.to_prepare do
     ChatwootFbProvider,
     Custom::FacebookMessengerVerifyToken
   )
+
+  # Instagram Login callback (GET /instagram/callback): without a verifiable
+  # `state`, redirect to /app instead of running the flow. Upstream's error path
+  # needs an account id to build its URL and 500s without one. See
+  # custom/app/controllers/custom/instagram/callbacks_controller.rb.
+  Custom::PrependOnce.call(
+    Instagram::CallbacksController,
+    Custom::Instagram::CallbacksController
+  )
 end

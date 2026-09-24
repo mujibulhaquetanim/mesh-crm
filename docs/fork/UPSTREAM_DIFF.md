@@ -255,6 +255,12 @@ Everything here is net-new; pulling upstream can never conflict with it.
     every handshake). Non-reloadable target: the class is defined inside
     `config/initializers/facebook_messenger.rb`, not autoloaded, so there is
     no hook to use. Spec: `spec/custom/initializers/facebook_messenger_verify_token_spec.rb`.
+  - `Instagram::CallbacksController` ← `Custom::Instagram::CallbacksController`
+    (`GET /instagram/callback` without a verifiable `state` redirects to `/app`
+    instead of running the flow. Upstream's error path builds
+    `app_new_instagram_inbox_url(account_id: nil)` and 500s, and would
+    exchange a code that arrived with no valid state). Reloadable target, no
+    upstream hook. Spec: `spec/custom/controllers/instagram/callbacks_controller_spec.rb`.
 
   Every other customization in this fork resolves through an upstream-supplied
   hook (§3); these are the classes where the fork had to add the hook
