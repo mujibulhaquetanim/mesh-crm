@@ -998,6 +998,11 @@ git commit --no-edit
 # forced false by the platform (agentic-str chatwoot-features.ts, whose spec pins
 # the exact set). captain_classifier slipped through once (agentic-str ts/450):
 rg -n --color=never "name: captain" config/features.yml
+# Brand + vendor feature policy (VENDOR_FEATURE_POLICY.md): fails on new "Chatwoot"
+# en strings upstream ADDED (they never conflict, so nobody looks at them), a
+# dropped prepend_mod_with an overlay loads through, or a missing policy piece;
+# warns on a new integration app to classify. Also the pre-push hook.
+python3 scripts/fork-policy/check.py           # RESULT: ok to ship
 git push origin develop                # fork only
 ```
 

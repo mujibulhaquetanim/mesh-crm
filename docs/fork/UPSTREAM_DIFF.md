@@ -87,6 +87,20 @@ Everything here is net-new; pulling upstream can never conflict with it.
   - Controller guards: `custom/app/controllers/custom/api/v1/accounts/*` (teams,
     webhooks, labels, automation_rules, custom_attribute_definitions, agent_bots,
     integrations/hooks).
+  - **Vendor feature policy (2026-09-27, `VENDOR_FEATURE_POLICY.md`):**
+    `custom/app/services/custom/vendor_feature_policy.rb` (the list),
+    `custom/app/controllers/custom/concerns/vendor_feature_guard.rb` (the 403),
+    guards in the `agent_bots` and `integrations/hooks` overlays above, a new
+    `custom/app/controllers/custom/api/v1/accounts/inboxes_controller.rb`
+    (`agent_bot` / `set_agent_bot`), `Custom::Integrations::Hook#disabled?`,
+    and `custom/app/models/custom/integrations/app.rb` (`active?`, registered
+    in `custom_prepends.rb`). **This one changes upstream behaviour for
+    administrators**: agent-bot endpoints, the inbox bot setting, and OpenAI /
+    Dialogflow hook create, update and `process_event` answer
+    403 `feature_managed_by_platform` to anyone not platform-managed, where
+    upstream answers 200. 25 upstream examples fail because of it, listed in
+    `VENDOR_FEATURE_POLICY.md`. Upstream specs are NOT edited.
+    `scripts/fork-policy/` (check, self-test, hook installer) is fork-only too.
   - Platform-managed flag permit: `custom/app/controllers/custom/platform/api/v1/account_users_controller.rb`.
   - Platform account merge-patch: `custom/app/controllers/custom/platform/api/v1/accounts_controller.rb`
     (`custom_attributes` on update is RFC 7386-style merge-patch so the control
@@ -261,6 +275,10 @@ Everything here is net-new; pulling upstream can never conflict with it.
     `app_new_instagram_inbox_url(account_id: nil)` and 500s, and would
     exchange a code that arrived with no valid state). Reloadable target, no
     upstream hook. Spec: `spec/custom/controllers/instagram/callbacks_controller_spec.rb`.
+  - `Integrations::App` ← `Custom::Integrations::App` (`active?` is false
+    for OpenAI and Dialogflow, so they drop out of Settings → Integrations;
+    vendor feature policy). Plain Ruby class, no upstream hook. Spec:
+    `spec/custom/controllers/api/v1/accounts/vendor_feature_policy_spec.rb`.
 
   Every other customization in this fork resolves through an upstream-supplied
   hook (§3); these are the classes where the fork had to add the hook
@@ -532,8 +550,10 @@ all are **additive and inert by default**:
 - **`EXTERNAL_LOGIN_URL` exposure** — `app/controllers/dashboard_controller.rb`
   (+1): one additive key in `app_config`, defaulting to `''`.
 - **Branding copy** — `config/locales/en.yml` (new `errors.quota.*` /
-  `errors.automation_rule.*` / `errors.sso_only_login` keys + "Chatwoot"→"Mesh
-  CRM" value swaps) and ~16
+  `errors.automation_rule.*` / `errors.sso_only_login` /
+  `errors.vendor_feature_policy.*` keys + "Chatwoot"→"Mesh CRM"→"Zasmate"
+  value swaps; 20 more `en` values that the v4.18.0 sync added were swapped on
+  2026-09-27, and `scripts/fork-policy/check.py` now fails on any new one) and ~16
   frontend files (`i18n/locale/en/*.json` for dashboard/survey/widget plus a few
   Vue/JS string literals in `Code.vue`, `Widget.vue`, `ArticleSearch/Header.vue`,
   `SenderNameExamplePreview.vue`, `Mfa*.vue`, `CampaignEmptyStateContent.js`,

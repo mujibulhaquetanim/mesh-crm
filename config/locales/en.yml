@@ -81,6 +81,8 @@ en:
     campaign:
       reply_authority_reserved: 'Campaigns are disabled for this account — messages to customers are sent by the AI agent, and campaign sends would bypass its handling, your usage metering, and the audit trail. Existing campaigns can still be disabled or deleted.'
     sso_only_login: 'Direct sign-in is disabled. Please sign in through your account portal.'
+    vendor_feature_policy:
+      managed_by_platform: 'This feature is managed by the platform for your account: customer replies come from its AI agent, with handoff to your team. Configure the AI from your dashboard.'
     account:
       not_authorized: You are not authorized to access this account
       email_limit_exceeded: The daily email limit for this account has been reached
