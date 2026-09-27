@@ -851,6 +851,67 @@ None.
 
 ---
 
+## 3i. Fourteen commits, the first sync onto an MIT-only fork (2026-09-27)
+
+14 upstream commits (`cdfaa255dc` → `b8eb7766f2`), 264 files, +10986/−2887:
+66 under `enterprise/`, which production no longer ships (MIT_ONLY.md). Merged
+onto the MIT-only branch (#50), so it was tested in **both** trees.
+
+| Upstream commit | What it is |
+| --- | --- |
+| `367bfb35ca`, `fcadd60492` | account setting to enforce 2FA, moved to the security settings page |
+| `f052f667c4`, `2cfe79ec1e`, `cf90f4e51d`, `1161aa651d` | conversation monitors (reports), new `conversation_monitors` feature, **premium**, default off |
+| `f9cf455b06` | "AI reply takeover" banner. It fires only for non-`User` (Captain) assignees; our AI replies as a `User`, so it doesn't apply. `AutoAssignmentHandler` now skips when an assignee is being set explicitly |
+| `650e448d97`, `685abc72d9`, `0d17437200`, `37164f874e` | Captain V1 sunset and Captain changes: all in `enterprise/` |
+| `2a65bede33` | email delivery checks in super admin |
+| `fa57193fe0` | automation form crash fix |
+| `b8eb7766f2` | CI notification only |
+
+### The one conflict, and the one reset
+
+- **`.env.example` (class C):** both sides added at the `FRONTEND_URL` anchor.
+  Kept the fork's block (`localhost`, with the "never 0.0.0.0" warning,
+  agentic-str troubleshooting 030) and upstream's new conversation-monitors
+  comments, and dropped upstream's `0.0.0.0` default.
+- **`enterprise/app/controllers/enterprise/api/v1/accounts_controller.rb`:** it
+  merged clean, but it was the fork's **only** edit inside `enterprise/` (a
+  `prepend_mod_with` hook for the limits overlay that #50 removed). Took
+  upstream's version, so `enterprise/` is now byte-identical to upstream. The
+  new `check.py` check `mit.enterprise_untouched` fails on any future fork edit there.
+
+### Checks, all before the PR
+
+- **Overlay overlap (§3b loop):** `devise_overrides/sessions_controller.rb`
+  (upstream added an MFA-setup branch to `create`; the fork's SSO-only
+  `create` still wraps it, and `sso_authentication_request?` still exists) and
+  `mfa/management_service.rb` (upstream changed `verify_and_activate!`; the
+  fork overrides only `two_factor_provisioning_uri`). Both fine.
+- **`custom_prepends.rb` targets and the injector/`ChatwootApp`:** untouched by upstream.
+- **Fork lines in both-sides files:** MFA extension point, `skip: [:registrations]`,
+  the SSO redirect in `login/Index.vue`, `page_id_unique`, all three
+  `platform_managed` columns: all present.
+- **Brand and policy:** `scripts/fork-policy/check.py` 80 passed, 0 failed.
+- **Specs, `zeitwerk:check` "All is good!" in both trees:** with `enterprise/`,
+  `spec/custom` 294/0; without it, 294/0 plus 1 pending (the enterprise-schema
+  tripwire). Before the merge, both trees gave the same counts.
+
+### Migrations this brings to production
+
+`20260922000000_create_conversation_monitors`, `20260924000000_add_icon_to_conversation_monitors`:
+additive (a new table). They live in core `db/migrate`, so they run on the MIT-only
+image too. The table stays empty: the feature is premium and its code is in `enterprise/`.
+`Gemfile.lock` changed upstream; the image build installs it.
+
+### Audit trail
+
+| Thing | SHA |
+|---|---|
+| merge-base | `cdfaa255dc` |
+| `upstream/develop` tip merged in | `b8eb7766f2` |
+| the merge commit (sync branch) | `f2fb55cee6` |
+
+---
+
 ## 5b. Paid-only surfaces must stay hidden (every sync AND every rebuild)
 
 **Why:** the image ships `enterprise/` (the fork's quota layer is built on it),

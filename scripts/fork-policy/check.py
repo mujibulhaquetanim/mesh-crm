@@ -211,6 +211,22 @@ def check_tree(root, brand, report):
                         f'upstream added integration app {app!r}: decide whether it is an AI reply path, '
                         'then add it to BLOCKED (policy + checker) or ALLOWED (checker)')
 
+    # mit.enterprise_untouched — the fork never edits enterprise/: it doesn't
+    # ship (MIT_ONLY.md), and an edit there is either dead or a licence problem.
+    # Compared from the last merge-base with upstream to the WORKING TREE, so
+    # upstream's own newer changes don't count and uncommitted edits do. Needs
+    # the `upstream` remote fetched.
+    if (root / '.git').exists():
+        base = subprocess.run(['git', '-C', str(root), 'merge-base', 'HEAD', 'upstream/develop'],
+                              capture_output=True, text=True)
+        if base.returncode != 0:
+            report.warn('mit.enterprise_untouched', 'cannot compare: fetch upstream first (`git fetch upstream develop`)')
+        else:
+            changed = subprocess.run(['git', '-C', str(root), 'diff', '--name-only', base.stdout.strip(),
+                                      '--', 'enterprise/'], capture_output=True, text=True).stdout.split()
+            report.check('mit.enterprise_untouched', not changed,
+                         'the fork changed enterprise/: ' + ', '.join(changed[:5]) + ' — take upstream\'s version')
+
     if (root / '.git').exists():
         # Markdown is excluded: the sync runbooks quote conflict blocks as examples.
         out = subprocess.run(['git', '-C', str(root), 'grep', '-lE', '^(<<<<<<< |>>>>>>> )', '--', '.', ':!*.md'],
