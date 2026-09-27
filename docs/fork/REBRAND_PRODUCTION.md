@@ -1,5 +1,13 @@
 # Applying the Zasmate rebrand to a RUNNING instance
 
+> ⚠ **2026-09-27: on the `community` plan this does not last.** Upstream's
+> enterprise `Internal::ReconcilePlanConfigService` runs every night at 00:00
+> UTC and resets every row below (and the logo paths) to Chatwoot's values,
+> because custom branding is a licensed feature. Each application in this file
+> held until the next midnight UTC. Don't patch the reconcile out (README
+> rule 6). The durable fix is an owner decision: see `VENDOR_FEATURE_POLICY.md`
+> and agentic-str troubleshooting 469.
+
 Merging the rebrand does not change a running install. This file is the part
 that does.
 

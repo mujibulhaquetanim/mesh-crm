@@ -83,4 +83,13 @@ Rails.application.config.to_prepare do
     DashboardController,
     Custom::DashboardController
   )
+
+  # Integrations list: AI integrations (OpenAI, Dialogflow) are never `active?`
+  # for an account, so they drop out of Settings → Integrations. The platform's
+  # agent is the only AI in front of a customer. See
+  # custom/app/services/custom/vendor_feature_policy.rb.
+  Custom::PrependOnce.call(
+    Integrations::App,
+    Custom::Integrations::App
+  )
 end

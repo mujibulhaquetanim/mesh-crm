@@ -2,10 +2,19 @@ module Custom::Api::V1::Accounts::AgentBotsController
   def self.prepended(base)
     base.include Custom::Concerns::QuotaEnforcement
     base.include Custom::Concerns::PlatformActor
+    base.include Custom::Concerns::VendorFeatureGuard
+    # Every action, reads included: the bot list carries each bot's access
+    # token and secret, and the UI that reads it is hidden. See
+    # Custom::VendorFeaturePolicy.
+    base.before_action :refuse_agent_bots_to_vendors
     base.before_action :check_agent_bots_quota, only: [:create]
   end
 
   private
+
+  def refuse_agent_bots_to_vendors
+    refuse_platform_managed_feature unless platform_actor?
+  end
 
   def check_agent_bots_quota
     # The system AI AgentBot is platform-managed infrastructure — exempt from

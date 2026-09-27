@@ -144,3 +144,12 @@ Read in this order:
    touched path with `git cat-file -e upstream/develop:<path>`. A hit means the
    change belongs in an overlay instead. The few sanctioned exceptions are
    listed in UPSTREAM_DIFF.md.
+8. **Vendors see Zasmate, and never a feature the platform owns.** Agent bots
+   and AI integrations (OpenAI, Dialogflow) are hidden from vendors and
+   refused with a 403. Only the platform's own service identity may use them.
+   The brand name is on every vendor-visible surface. `scripts/fork-policy/check.py`
+   enforces both: before every push (install the hook once per clone with
+   `scripts/fork-policy/install-pre-push-hook.sh`), on the build clone before
+   every rebuild, and with `--live` against the running inbox after every
+   release. **[VENDOR_FEATURE_POLICY.md](./VENDOR_FEATURE_POLICY.md)** has the
+   list, the reasons, and how to add a feature.

@@ -13,12 +13,16 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
     user
   end
 
+  # Who makes the request. A tenant admin everywhere except agent bots, which
+  # only the platform identity may create (Custom::VendorFeaturePolicy).
+  let(:actor) { admin }
+
   shared_examples 'a quota guarded create endpoint' do
     it 'rejects creation at the cap with the shared 402 contract' do
       account.update!(limits: { resource => 1 })
       existing_record
 
-      post url, params: payload, headers: admin.create_new_auth_token, as: :json
+      post url, params: payload, headers: actor.create_new_auth_token, as: :json
 
       expect(response).to have_http_status(:payment_required)
       body = response.parsed_body
@@ -33,7 +37,7 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
       account.update!(limits: { resource => 2 })
       existing_record
 
-      post url, params: payload, headers: admin.create_new_auth_token, as: :json
+      post url, params: payload, headers: actor.create_new_auth_token, as: :json
 
       expect(response).to have_http_status(:success)
     end
@@ -62,6 +66,8 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
     let(:url) { "/api/v1/accounts/#{account.id}/agent_bots" }
     let(:payload) { { name: 'Quota Bot', outgoing_url: 'https://example.com/bot' } }
     let(:existing_record) { create(:agent_bot, account: account) }
+    # Without `platform_managed`, so the bot counts and the quota applies.
+    let(:actor) { platform_admin }
 
     it_behaves_like 'a quota guarded create endpoint'
   end
@@ -138,8 +144,9 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
     let(:url) { "/api/v1/accounts/#{account.id}/integrations/hooks" }
     let(:inbox) { create(:inbox, account: account) }
     let(:payload) do
-      { app_id: 'dialogflow', inbox_id: inbox.id,
-        settings: { project_id: 'xx', credentials: { test: 'test' }, region: 'europe-west1' } }
+      # Not Dialogflow or OpenAI: those are refused before the quota check
+      # (Custom::VendorFeaturePolicy, covered in vendor_feature_policy_spec.rb).
+      { app_id: 'google_translate', settings: { project_id: 'xx', credentials: { test: 'test' } } }
     end
     let(:existing_record) { create(:integrations_hook, account: account) }
 
@@ -212,27 +219,21 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
       expect(account.webhooks.find_by(url: 'https://example.com/counted').platform_managed).to be false
     end
 
-    it 'blocks an agent bot even when the tenant admin supplies platform_managed: true' do
-      account.update!(limits: { agent_bots: 1 })
-      create(:agent_bot, account: account)
+    # Stronger than the quota: a tenant admin cannot create an agent bot at all,
+    # so supplying `platform_managed: true` gains nothing at or below the cap.
+    it 'refuses an agent bot even when the tenant admin supplies platform_managed: true' do
+      [1, 5].each do |cap|
+        account.update!(limits: { agent_bots: cap })
 
-      post "/api/v1/accounts/#{account.id}/agent_bots",
-           params: { name: 'Sneaky Bot', outgoing_url: 'https://example.com/bot', platform_managed: true },
-           headers: admin.create_new_auth_token, as: :json
+        expect do
+          post "/api/v1/accounts/#{account.id}/agent_bots",
+               params: { name: 'Sneaky Bot', outgoing_url: 'https://example.com/bot', platform_managed: true },
+               headers: admin.create_new_auth_token, as: :json
+        end.not_to change(AgentBot, :count)
 
-      expect(response).to have_http_status(:payment_required)
-      expect(response.parsed_body['error_code']).to eq('quota_exceeded')
-    end
-
-    it 'strips the flag on a below-cap agent bot so it still counts against the plan' do
-      account.update!(limits: { agent_bots: 5 })
-
-      post "/api/v1/accounts/#{account.id}/agent_bots",
-           params: { name: 'Counted Bot', outgoing_url: 'https://example.com/bot', platform_managed: true },
-           headers: admin.create_new_auth_token, as: :json
-
-      expect(response).to have_http_status(:success)
-      expect(account.agent_bots.find_by(name: 'Counted Bot').platform_managed).to be false
+        expect(response).to have_http_status(:forbidden)
+        expect(response.parsed_body['error_code']).to eq('feature_managed_by_platform')
+      end
     end
   end
 end
