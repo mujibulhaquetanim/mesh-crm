@@ -54,11 +54,19 @@ different places, which is why the check has two modes:
 | Browser tab title template | `app/views/layouts/vueapp.html.erb` (must read `INSTALLATION_NAME`) | `--tree` |
 | Tab title, product name, brand/legal links | **database rows** (`InstallationConfig`) | `--live` only |
 
-⚠ The database rows are the ones that have gone wrong most often: the title
-said "Chatwoot" on production after the rebrand was merged (2026-09-14),
-after a run against the wrong database (2026-09-24), and again on 2026-09-27
-after a correct run on 2026-09-25. A rebuild never changes them. Fix them with
-`REBRAND_PRODUCTION.md`, then run `--live`.
+⚠ **On the `community` plan the database rows can't stay branded.** Upstream's
+`Enterprise::Internal::CheckNewVersionsJob` runs every night at 00:00 UTC
+(`config/schedule.yml` `internal_check_new_versions_job`) and calls
+`Internal::ReconcilePlanConfigService`. That service rewrites every row in
+`enterprise/config/premium_installation_config.yml` (the name, the brand and
+legal URLs, the logo paths) back to Chatwoot's values, because custom branding
+is a licensed Chatwoot feature. This is why the title said "Chatwoot" again
+after each rebrand (2026-09-20, 09-24, 09-25). **Do not override the
+reconcile.** That would run licensed code with its licence enforcement
+switched off (rule 6). The fix is an owner decision: a Chatwoot Enterprise
+licence, not running `enterprise/` in production, or keeping the name
+(agentic-str troubleshooting 469). Until then, `--live` fails its `live.*`
+brand checks after every midnight UTC. A rebuild never changes the rows.
 
 Only `en` files are checked: other locales come from Crowdin (root CLAUDE.md).
 Identifiers are not copy. Keys such as `UPDATE_CHATWOOT`, variables such as

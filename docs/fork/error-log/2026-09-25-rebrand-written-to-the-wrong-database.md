@@ -64,3 +64,14 @@ docker compose -f docker-compose.prod.yaml exec -T rails bundle exec rails runne
   'puts InstallationConfig.find_by(name: %q(INSTALLATION_NAME)).value'   # Zasmate
 curl -sL https://inbox.zasmate.com/app/login | tr '\n' ' ' | grep -oE '<title>[^<]*</title>'
 ```
+
+## Correction (2026-09-27)
+
+The one-day lifetime of the 2026-09-24 run was attributed above to the Redis
+cache expiring (`GlobalConfig::DEFAULT_EXPIRY`). A cause that fits the evidence
+better was found two days later. On the `community` plan, upstream's enterprise
+`Internal::ReconcilePlanConfigService` (nightly, 00:00 UTC,
+`internal_check_new_versions_job`) rewrites these rows to Chatwoot's values.
+The correct 2026-09-25 run was reverted the same way. Both may have happened
+on 09-24. Only the nightly reset explains 09-25. See `VENDOR_FEATURE_POLICY.md`.
+
