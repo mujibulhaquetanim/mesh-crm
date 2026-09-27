@@ -413,7 +413,7 @@ tenant. It rides the existing limits pipeline rather than a parallel store:
   **separate from `QUOTA_RESOURCES`** on purpose: `EXTERNAL_LIMIT_KEYS` are
   schema-valid but get no counter, no `usage_limits` merge, and no create-guard —
   Chatwoot stores and displays them but never enforces them.
-- `GET /enterprise/api/v1/accounts/:id/limits` (`Custom::Enterprise::Api::V1::AccountsController`)
+- `GET /enterprise/api/v1/accounts/:id/limits` (`Custom::AccountLimitsController`, MIT core; see MIT_ONLY.md)
   emits `agentic_ai: { allowed, consumed }` in the standard shape, but **only
   when a cap is set** — accounts without agentic AI get an unchanged response.
 - UI: `dashboard/fork/AgenticAiLimitBanner.vue` reuses `useQuota('agentic_ai')`

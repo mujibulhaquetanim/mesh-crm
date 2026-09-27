@@ -11,7 +11,19 @@ RSpec.describe Custom::Account::PlanUsageAndLimits do
     end
 
     it 'keeps the upstream keys intact' do
-      expect(account.usage_limits).to include(:agents, :inboxes, :captain)
+      expect(account.usage_limits).to include(:agents, :inboxes)
+      # `captain` is an enterprise key; production runs without enterprise/.
+      expect(account.usage_limits).to include(:captain) if ChatwootApp.enterprise?
+    end
+
+    # The core's own seat guards (AgentBuilder#can_add_agent?, the bulk-invite
+    # count) read these. Without enterprise/, only this override applies the
+    # per-account cap (docs/fork/MIT_ONLY.md).
+    it 'resolves agents and inboxes from the limits column' do
+      account.update!(limits: { agents: 3, inboxes: 4 })
+
+      expect(account.usage_limits[:agents]).to eq 3
+      expect(account.usage_limits[:inboxes]).to eq 4
     end
 
     it 'resolves per-account overrides from the limits column' do
@@ -52,6 +64,11 @@ RSpec.describe Custom::Account::PlanUsageAndLimits do
     end
 
     it 'accepts every key the enterprise schema accepts (upstream-sync tripwire)' do
+      # Runs wherever enterprise/ is present (development, the sync checks).
+      # The production build strips it (docs/fork/MIT_ONLY.md), and there is no
+      # enterprise schema to compare against.
+      skip 'enterprise/ is not present in this tree' unless defined?(Enterprise::Account::PlanUsageAndLimits)
+
       # The fork REPLACES Enterprise#validate_limit_keys (its schema is
       # additionalProperties: false, so it cannot be extended). If upstream adds
       # a new limit key, the fork must mirror it in base_keys or writes of that

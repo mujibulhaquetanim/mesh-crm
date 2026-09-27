@@ -9,12 +9,28 @@ module Custom::Account::PlanUsageAndLimits
   # EntitlementService counter/guard.
   EXTERNAL_LIMIT_KEYS = %w[agentic_ai].freeze
 
+  # Seat keys the core itself enforces from `usage_limits`: AgentBuilder's
+  # `can_add_agent?` and the bulk-invite `available_agent_count` read `agents`.
+  SEAT_LIMIT_KEYS = %w[agents inboxes].freeze
+
   # Fork keys resolve from the per-account limits jsonb only (the same source
   # Custom::EntitlementService enforces from) — no GlobalConfig fallback.
+  #
+  # `agents` and `inboxes` also read the account's own limits first. The MIT
+  # core's `usage_limits` returns the installation maximum for both, and until
+  # 2026-09-27 enterprise's override was what applied the per-account cap. In
+  # production, which runs without enterprise/ (docs/fork/MIT_ONLY.md), without
+  # this the seat cap the platform projects would be ignored by the core's own
+  # guards. With enterprise present, `super` still supplies the fallback.
   def usage_limits
-    super.merge(QUOTA_RESOURCES.to_h do |resource|
+    base = super
+    seats = SEAT_LIMIT_KEYS.to_h do |key|
+      [key.to_sym, (self[:limits].to_h[key].presence || base[key.to_sym]).to_i]
+    end
+    fork_keys = QUOTA_RESOURCES.to_h do |resource|
       [resource.to_sym, (self[:limits].to_h[resource].presence || ChatwootApp.max_limit).to_i]
-    end)
+    end
+    base.merge(seats).merge(fork_keys)
   end
 
   private

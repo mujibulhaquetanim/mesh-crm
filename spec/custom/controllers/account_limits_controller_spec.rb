@@ -1,14 +1,12 @@
 require 'rails_helper'
 
-RSpec.describe 'Enterprise Accounts API (fork quota limits)', type: :request do
+# custom/app/controllers/custom/account_limits_controller.rb, routed by
+# config/initializers/custom_routes.rb. The path is the one the dashboard's
+# quota UI already calls; the fork serves it on the MIT core, with or without an
+# enterprise folder present (docs/fork/MIT_ONLY.md).
+RSpec.describe 'Account limits (fork quota endpoint)', type: :request do
   let(:account) { create(:account) }
   let(:admin) { create(:user, account: account, role: :administrator) }
-
-  before do
-    # Deterministic self-hosted env regardless of GlobalConfig cache state
-    # left behind by other spec files in the same process.
-    allow(ChatwootApp).to receive(:chatwoot_cloud?).and_return(false)
-  end
 
   describe 'GET /enterprise/api/v1/accounts/{account.id}/limits' do
     it 'serves limits on self-hosted installs with every quota resource' do
@@ -65,15 +63,19 @@ RSpec.describe 'Enterprise Accounts API (fork quota limits)', type: :request do
 
       expect(response).to have_http_status(:unauthorized)
     end
-  end
 
-  describe 'POST /enterprise/api/v1/accounts/{account.id}/toggle_deletion' do
-    it 'stays cloud-gated on self-hosted installs' do
-      post "/enterprise/api/v1/accounts/#{account.id}/toggle_deletion",
-           params: { action_type: 'delete' },
-           headers: admin.create_new_auth_token, as: :json
+    it 'is served by the fork controller, not an enterprise one' do
+      expect(Rails.application.routes.recognize_path("/enterprise/api/v1/accounts/#{account.id}/limits"))
+        .to include(controller: 'custom/account_limits', action: 'show')
+    end
 
-      expect(response).to have_http_status(:not_found)
+    it 'refuses a user from another account' do
+      outsider = create(:user, account: create(:account), role: :administrator)
+
+      get "/enterprise/api/v1/accounts/#{account.id}/limits",
+          headers: outsider.create_new_auth_token, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 end

@@ -127,10 +127,19 @@ Everything here is net-new; pulling upstream can never conflict with it.
     parameter, so a tenant identity can never self-grant the exemption. Landed
     `2ff69f8b0f` (2026-07-05); every file above that says "gated on a verified
     service identity" means this one.
-  - Limits read API + agentic-AI display:
-    `custom/app/controllers/custom/enterprise/api/v1/accounts_controller.rb`
-    (also re-derives `agents.consumed` from the entitlement service so the UI
-    count excludes platform-managed infra).
+  - Limits read API + agentic-AI display: `custom/app/controllers/custom/account_limits_controller.rb`
+    on the MIT core, routed by the fork-only `config/initializers/custom_routes.rb`
+    (`routes.prepend`) at the path the dashboard already calls,
+    `GET /enterprise/api/v1/accounts/:account_id/limits`. `agents.consumed`
+    excludes platform-managed infra. Until 2026-09-27 this was an overlay on
+    `Enterprise::Api::V1::AccountsController`. It moved because production no
+    longer ships `enterprise/` ([MIT_ONLY.md](./MIT_ONLY.md)).
+  - **MIT-only production (2026-09-27):** `scripts/build-ce-image.sh` strips
+    `enterprise/` from the build clone, and the fork-only initializer
+    `config/initializers/01_inject_zz_custom_community_edition.rb` lets the
+    extension injector boot with `custom/` but no `enterprise/` (error-log
+    2026-09-27). No fork file may reference `Enterprise::`
+    (`scripts/fork-policy/check.py` `mit.no_enterprise_dependency`).
   - Auth lockdown: `custom/app/controllers/custom/devise_overrides/sessions_controller.rb`
     (password/MFA) + `.../omniauth_callbacks_controller.rb` (Google OAuth + SAML),
     sharing `custom/app/controllers/custom/concerns/sso_only_login.rb`.
@@ -317,7 +326,6 @@ lowest-risk possible edits.
 | `app/controllers/api/v1/accounts/integrations/hooks_controller.rb` | same pattern | quota `before_action` |
 | `app/controllers/platform/api/v1/account_users_controller.rb` | `...AccountUsersController.prepend_mod_with(...)` | `Custom::...AccountUsersController` (permit `platform_managed`, ADR-0005) |
 | `app/controllers/platform/api/v1/accounts_controller.rb` | `...AccountsController.prepend_mod_with(...)` | `Custom::...AccountsController` (`custom_attributes` merge-patch on update) |
-| `enterprise/app/controllers/enterprise/api/v1/accounts_controller.rb` | `...AccountsController.prepend_mod_with(...)` | limits endpoint + agentic-AI |
 | `app/mailers/administrator_notifications/account_notification_mailer.rb` | `...AccountNotificationMailer.prepend_mod_with(...)` | branded subjects |
 | `app/services/mfa/management_service.rb` | `Mfa::ManagementService.prepend_mod_with(...)` | branded TOTP issuer |
 | `app/controllers/super_admin/devise/sessions_controller.rb` | `SuperAdmin::Devise::SessionsController.prepend_mod_with(...)` | `Custom::SuperAdmin::Devise::SessionsController` (flag-gated MFA enforcement, `SUPER_ADMIN_ENFORCE_MFA`; inert by default) |
@@ -630,7 +638,7 @@ to upstream's text as the setup allows:
 | Native email/password + MFA login | `Custom::DeviseOverrides::SessionsController#create` is a straight `super` unless `ENABLE_SSO_ONLY_LOGIN` is truthy. |
 | Google OAuth / SAML login | `Custom::DeviseOverrides::OmniauthCallbacksController#omniauth_success` is a straight `super` unless the same flag is on; blocked at the provider entry point before any token is minted (no OSS edit — the OSS controller already ships the `prepend_mod_with` hook). |
 | `/app/login` page | Renders Chatwoot's form unless `EXTERNAL_LOGIN_URL` is set. |
-| `GET /enterprise/api/v1/accounts/:id/limits` on **cloud** | Override returns `super` untouched; fork keys only appear on self-hosted (where it previously 404'd). |
+| `GET /enterprise/api/v1/accounts/:id/limits` | Served by the fork's `Custom::AccountLimitsController` in every build. Production has no enterprise folder, so upstream doesn't draw the path there at all. |
 | Webhooks / message API / all routes | Not modified at all — the AI loop is an external service riding stock contracts. |
 | Inbound WhatsApp webhooks | Signature becomes mandatory only when the installation has a secret to verify with (`WHATSAPP_APP_SECRET`, or a per-channel one upstream already required). No config set ⇒ upstream's exact behavior. 360dialog inboxes and the `GET` verify handshake are never asked for a signature ([§2](#2-fork-owned-trees-new-files--no-upstream-overlap)). |
 | Inbox API payload | Unchanged except that four secret-shaped `provider_config` keys are removed for WhatsApp channels — the one non-additive response change in the fork, and it is a credential ([§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder)). `api_key` and every other key still render, and the administrator-only gating is untouched. |

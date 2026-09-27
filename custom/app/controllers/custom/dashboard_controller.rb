@@ -1,6 +1,12 @@
 # Fork overlay for the dashboard's boot config: on the community plan, tell the
 # frontend this is NOT an enterprise install.
 #
+# ⚠ Since 2026-09-27 the PRODUCTION image is built without `enterprise/`
+# (docs/fork/MIT_ONLY.md), so there `ChatwootApp.enterprise?` is already false
+# and this overlay changes nothing. It stays for every tree where the folder IS
+# present (development, prod-local, specs), so paid-only surfaces stay hidden
+# there too. The history below describes the period when production shipped it.
+#
 # ## The bug this closes
 #
 # The image ships upstream's `enterprise/` folder, and the fork's quota layer is
