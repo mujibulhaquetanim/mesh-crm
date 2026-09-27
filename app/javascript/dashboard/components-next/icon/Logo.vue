@@ -28,7 +28,7 @@ const globalConfig = useMapGetter('globalConfig/get');
       that lost its config fell back to someone else's brand. Drawn rather than
       referenced because a fallback that fetches a file is not a fallback.
     -->
-    <circle cx="8" cy="8" r="8" fill="#19A6D3" />
+    <circle cx="8" cy="8" r="8" fill="#F87D13" />
     <path
       d="M5 5.4h6l-6 5.2h6"
       fill="none"

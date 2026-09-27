@@ -11,35 +11,32 @@
 # without adding its <link> does nothing; changing a size silently breaks the
 # tag that declares it.
 #
-# ── Why floodfill and not `-transparent` ────────────────────────────────────
-# The masters are JPEGs on an opaque #F7F7F7 field. The obvious recipe,
-# `-fuzz 12% -transparent '#F7F7F7'`, matches that colour GLOBALLY — and the
-# logo's "Z" and the speech-bubble interior are the same near-white, so they go
-# transparent too and you ship a logo you can see through. It still opens, still
-# has an alpha channel, still has the right dimensions. Measured: 30% opaque
-# against 69% for the correct lift.
+# ── The masters (2026-09-28 artwork) ────────────────────────────────────────
+#   docs/brand/zasmate-mark.png      the orange "Z" + sparkle
+#   docs/brand/zasmate-wordmark.png  the orange ZASMATE wordmark
+# Both are RGBA on a TRANSPARENT background, the same files as agentic-str's
+# docs/logo_photos/. There is no keying step any more: the old JPEG masters sat
+# on an opaque #F7F7F7 field and had to be floodfilled off it
+# (docs/fork/error-log/2026-09-22-transparent-matches-globally-and-punches-out-the-logo.md).
 #
-# `-floodfill +0+0` spreads only through *connected* colour, so it takes the
-# outer field and stops at the bubble's edge. The 1px border added first makes
-# all four outer regions connected to the seed.
-#
-# `spec/brand/brand_assets_spec.rb` counts the white Z in the output, so the
-# naive recipe cannot come back unnoticed.
+# Trimming uses an alpha threshold rather than a plain `-trim`: the masters
+# carry a few near-transparent specks outside the artwork, and a plain trim
+# keeps the box they span. `spec/brand/brand_assets_spec.rb` checks the output
+# is opaque orange artwork on a genuinely transparent background.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 if command -v magick >/dev/null 2>&1; then IM=(magick); else IM=(convert); fi
 
-SRC_MARK="docs/brand/zasmate_bubble.jpeg"
-SRC_WORDMARK="docs/brand/zasmate_logo.jpeg"
-BG="#F7F7F7"
-FUZZ="12%"
+SRC_MARK="docs/brand/zasmate-mark.png"
+SRC_WORDMARK="docs/brand/zasmate-wordmark.png"
 
-# Sampled from the artwork: the bubble's dominant cyan. Used for the PWA theme
-# and tile colours, which upstream still had on Chatwoot's #2781F6.
-BRAND_CYAN="#19A6D3"
-# The unread-conversation dot that `faviconHelper.js` swaps in.
+# The palette's flame orange, for the PWA theme and tile colours
+# (public/manifest.json, vueapp.html.erb).
+BRAND_COLOUR="#F87D13"
+# The unread-conversation dot that `faviconHelper.js` swaps in, ringed in white
+# so it separates from the orange mark.
 BADGE_RED="#FF4A4A"
 
 for src in "$SRC_MARK" "$SRC_WORDMARK"; do
@@ -49,20 +46,26 @@ done
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-key_out() {
-  "${IM[@]}" "$1" \
-    -alpha set -bordercolor "$BG" -border 1 \
-    -fuzz "$FUZZ" -fill none -floodfill +0+0 "$BG" \
-    -shave 1x1 -trim +repage "$2"
+# Crop to the pixels that are clearly opaque (alpha > 20%), cropping the
+# ORIGINAL so soft edges keep their alpha but stray specks don't widen the box.
+crop_to_art() {
+  local box
+  box="$("${IM[@]}" "$1" -alpha extract -threshold 20% -format '%@' info:)"
+  "${IM[@]}" "$1" -crop "$box" +repage "$2"
 }
 
-key_out "$SRC_MARK" "$WORK/mark-trimmed.png"
-key_out "$SRC_WORDMARK" "$WORK/wordmark.png"
+crop_to_art "$SRC_MARK" "$WORK/mark-trimmed.png"
+crop_to_art "$SRC_WORDMARK" "$WORK/wordmark-tight.png"
+# A transparent margin (3% of the height) so letters cut by the crop aren't
+# flush with the image edge.
+read -r WW WH < <("${IM[@]}" "$WORK/wordmark-tight.png" -format '%w %h\n' info:)
+"${IM[@]}" "$WORK/wordmark-tight.png" -bordercolor none -border "$(( WH * 3 / 100 ))" "$WORK/wordmark.png"
 
-# The mark trims to a non-square box (the orbit dots overhang right); every slot
-# below is square, so centre it rather than let the resize squash it.
+# The mark is slightly wide (the sparkle); every slot below is square, so centre
+# it with 8% padding rather than let the resize squash it or the sparkle touch
+# a favicon's edge.
 read -r MW MH < <("${IM[@]}" "$WORK/mark-trimmed.png" -format '%w %h\n' info:)
-SIDE=$(( MW > MH ? MW : MH ))
+SIDE=$(( (MW > MH ? MW : MH) * 108 / 100 ))
 "${IM[@]}" "$WORK/mark-trimmed.png" \
   -background none -gravity center -extent "${SIDE}x${SIDE}" "$WORK/mark.png"
 
@@ -99,7 +102,7 @@ badge() {
   d=$(( s * 42 / 100 ))              # dot diameter, matched to upstream's badge
   r=$(( d / 2 ))
   "${IM[@]}" "$WORK/mark.png" -resize "${s}x${s}" \
-    -fill "$BADGE_RED" -stroke none \
+    -fill "$BADGE_RED" -stroke white -strokewidth "$(( s >= 32 ? 2 : 1 ))" \
     -draw "circle $(( s - r - 1 )),$(( r + 1 )) $(( s - r - 1 )),1" \
     -strip -define png:color-type=6 "$out"
 }
@@ -132,32 +135,11 @@ mkdir -p public/brand-assets
 "${IM[@]}" "$WORK/wordmark.png" -resize x160 -strip "$WORK/logo-light.png"
 svg_wrap "$WORK/logo-light.png" "public/brand-assets/logo.svg"
 
-# The dark-mode logo is a SEPARATE FILE, not a CSS filter: the lockup's tagline
-# is near-black navy and disappears on a dark surface. Repaint just that ink,
-# behind two gates — geometric (only right of the gap between mark and text, so
-# the mark's navy orbit dot survives; its core is 24.7% luma, darker than it
-# looks) and luminance (the tagline is 12.3%, the darkest ZASMATE blue 35.8%).
-read -r LW LH < <("${IM[@]}" "$WORK/logo-light.png" -format '%w %h\n' info:)
-GAP="$("${IM[@]}" "$WORK/logo-light.png" -alpha extract -scale x1! -threshold 1% txt:- 2>/dev/null |
-  awk -F'[,:( ]+' '
-    NR > 1 { empty[$1] = ($4 == 0) ? 1 : 0; if ($1 > max) max = $1 }
-    END {
-      best = -1
-      for (x = 1; x < max; x++) {
-        if (empty[x]) { if (!run) start = x; run++ }
-        else if (run) { if (run > best) { best = run; mid = int((start + x - 1) / 2) } ; run = 0 }
-      }
-      print (best > 0) ? mid : 0
-    }')"
-[ "$GAP" -gt 0 ] || { echo "could not find the mark/text gap in the lockup" >&2; exit 1; }
-
-"${IM[@]}" "$WORK/logo-light.png" -alpha off -colorspace gray -threshold 25% -negate "$WORK/ink.png"
-"${IM[@]}" "$WORK/ink.png" -fill black -draw "rectangle 0,0 ${GAP},${LH}" "$WORK/ink-gated.png"
-"${IM[@]}" "$WORK/logo-light.png" -alpha extract "$WORK/alpha.png" 2>/dev/null
-"${IM[@]}" "$WORK/ink-gated.png" "$WORK/alpha.png" -compose Multiply -composite "$WORK/ink-mask.png"
-"${IM[@]}" -size "${LW}x${LH}" xc:"#C8DCE8" "$WORK/plate.png"
-"${IM[@]}" "$WORK/logo-light.png" "$WORK/plate.png" "$WORK/ink-mask.png" \
-  -compose Over -composite -strip "$WORK/logo-dark.png"
+# The dark-mode logo is the same artwork: the orange wordmark reads on white
+# and on a dark surface alike. The file stays separate because
+# config/installation_config.yml points LOGO_DARK at it. (The old lockup had a
+# navy tagline that needed repainting for dark mode; the new one has none.)
+cp "$WORK/logo-light.png" "$WORK/logo-dark.png"
 svg_wrap "$WORK/logo-dark.png" "public/brand-assets/logo_dark.svg"
 
 # LOGO_THUMBNAIL is also the 512x512 <link rel="icon"> in vueapp.html.erb, so it
@@ -165,6 +147,6 @@ svg_wrap "$WORK/logo-dark.png" "public/brand-assets/logo_dark.svg"
 "${IM[@]}" "$WORK/mark.png" -resize 512x512 -strip "$WORK/thumb.png"
 svg_wrap "$WORK/thumb.png" "public/brand-assets/logo_thumbnail.svg"
 
-echo "Brand colour for manifest.json / vueapp.html.erb: $BRAND_CYAN"
+echo "Brand colour for manifest.json / vueapp.html.erb / Logo.vue: $BRAND_COLOUR"
 echo "Regenerated:"
 git status --short public/ | sed 's/^/  /'
