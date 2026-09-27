@@ -38,6 +38,8 @@ PATHS=(
   app/models/integrations/hook.rb
   custom
   spec/custom/controllers/api/v1/accounts/vendor_feature_policy_spec.rb
+  config/initializers/custom_routes.rb
+  scripts/build-ce-image.sh
 )
 
 fresh_tree() {
@@ -93,6 +95,18 @@ run_tree 'app overlay unregistered'; expect_fail 'policy.app_registered'
 
 fresh_tree; break_file app/controllers/api/v1/accounts/inboxes_controller.rb "s/^.*prepend_mod_with.*\$//m"
 run_tree 'upstream dropped an extension point'; expect_fail 'policy.hook_point'
+
+fresh_tree; rm "$WORK/tree/custom/app/controllers/custom/account_limits_controller.rb"
+run_tree 'fork quota endpoint deleted'; expect_fail 'mit.limits_controller'
+
+fresh_tree; break_file scripts/build-ce-image.sh 's/rm -rf "\$WORK\/enterprise"/true/'
+run_tree 'build stops stripping enterprise/'; expect_fail 'mit.build_strips_enterprise'
+
+fresh_tree; printf 'module Custom::Foo\n  def bar = Enterprise::Something.call\nend\n' > "$WORK/tree/custom/app/services/custom/foo.rb"
+run_tree 'fork code reaches into enterprise/'; expect_fail 'mit.no_enterprise_dependency'
+
+fresh_tree; printf '# mentions Enterprise::Something only in a comment\n' > "$WORK/tree/custom/app/services/custom/foo.rb"
+run_tree 'a comment is not a dependency'; expect_ok
 
 fresh_tree; printf 'captain_voice:\n  id: captain_voice\n' >> "$WORK/tree/config/integration/apps.yml"
 run_tree 'upstream adds an unclassified app'; expect_warn 'policy.new_integration'

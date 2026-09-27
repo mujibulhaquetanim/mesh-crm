@@ -8,6 +8,9 @@
 TREE mode reads source files only (no Ruby, no Docker) and fails when:
   brand.*   a vendor-visible English string, the PWA manifest, the logo artwork
             or the page-title template says "Chatwoot" instead of the brand;
+  mit.*     production is MIT-only: the fork quota endpoint and its route, the
+            build's enterprise/ strip and image check, and no fork Ruby that
+            references enterprise/ (docs/fork/MIT_ONLY.md);
   policy.*  a piece of the vendor feature policy is missing: the policy list,
             an overlay, its registration, or the upstream extension point the
             overlay hangs on (an upstream sync can drop one and the overlay
@@ -73,6 +76,17 @@ POLICY_REQUIREMENTS = [
      r'IS_ENTERPRISE: false', 'paid-only surfaces would show on the community plan'),
     ('policy.enterprise_registered', 'config/initializers/custom_prepends.rb',
      r'DashboardController,\s*Custom::DashboardController', 'the dashboard overlay is not registered'),
+    # MIT-only production (docs/fork/MIT_ONLY.md): the quota endpoint is fork
+    # code on the MIT core, and the build strips enterprise/.
+    ('mit.limits_controller', 'custom/app/controllers/custom/account_limits_controller.rb',
+     r'class Custom::AccountLimitsController < Api::V1::Accounts::BaseController',
+     'the fork quota endpoint is gone — the dashboard quota UI would 404 without enterprise/'),
+    ('mit.limits_route', 'config/initializers/custom_routes.rb',
+     r"to: 'custom/account_limits#show'", 'the quota route no longer points at the fork controller'),
+    ('mit.build_strips_enterprise', 'scripts/build-ce-image.sh',
+     r'rm -rf "\$WORK/enterprise"', 'the build no longer strips enterprise/ — licensed code would ship'),
+    ('mit.build_verifies_image', 'scripts/build-ce-image.sh',
+     r'/app/enterprise', 'the build no longer proves the image has no enterprise/'),
     ('policy.spec', 'spec/custom/controllers/api/v1/accounts/vendor_feature_policy_spec.rb',
      r"feature_managed_by_platform", 'the policy spec is gone'),
     # The upstream extension points the overlays above load through.
@@ -176,6 +190,18 @@ def check_tree(root, brand, report):
             listed = set(match.group(1).split())
             report.check('policy.list_matches', listed == BLOCKED_APPS,
                          f'the Ruby list {sorted(listed)} differs from this checker\'s {sorted(BLOCKED_APPS)} — update both')
+
+    # mit.no_enterprise_dependency — fork Ruby must not reach into enterprise/:
+    # production has no such folder, so a reference is a boot or runtime error
+    # there (docs/fork/MIT_ONLY.md). Comments are ignored.
+    offenders = []
+    for path in sorted((root / 'custom').rglob('*.rb')):
+        for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
+            code = line.split('#', 1)[0]
+            if re.search(r'\bEnterprise::|Custom::Enterprise\b', code):
+                offenders.append(f'{path.relative_to(root)}:{n}')
+    report.check('mit.no_enterprise_dependency', not offenders,
+                 'fork code references enterprise/: ' + ', '.join(offenders[:5]))
 
     apps_yml = root / 'config/integration/apps.yml'
     if apps_yml.exists():

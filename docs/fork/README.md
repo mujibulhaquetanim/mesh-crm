@@ -126,18 +126,22 @@ Read in this order:
    renders the four secret-shaped `provider_config` keys — see
    [UPSTREAM_DIFF.md §4.2](./UPSTREAM_DIFF.md#42-the-one-app-views-edit-inboxjsonjbuilder).
    Removing a field still needs that bar.
-6. **Paid-only features stay HIDDEN, never unlocked.** Everything under
-   `enterprise/` falls under `enterprise/LICENSE`: production use needs a paid
-   Chatwoot Enterprise licence, and this installation is on the `community`
-   plan. Never flip a plan check, a `premium` flag or `INSTALLATION_PRICING_PLAN`
-   to make one work. The dashboard is told `IS_ENTERPRISE=false` on the
-   community plan (`custom/app/controllers/custom/dashboard_controller.rb`),
-   which hides every enterprise-only surface at once. Captain is also forced
-   off per account by the platform (agentic-str `chatwoot-features.ts`),
-   because the platform's own agent is the only AI.
-   **After every upstream sync and every image rebuild, run
-   [UPSTREAM_SYNC.md §5b](./UPSTREAM_SYNC.md).** The 2026-09-24 sync shipped an
-   ungated "Calls" entry, and the owner found it before any check did.
+6. **Production runs the MIT core only; enterprise code never ships.**
+   Everything under `enterprise/` falls under `enterprise/LICENSE`, which needs
+   a paid Chatwoot Enterprise licence for production use, modified or not. The
+   production image is therefore built **without** `enterprise/`
+   (`scripts/build-ce-image.sh`, see **[MIT_ONLY.md](./MIT_ONLY.md)**), the same
+   way upstream builds its community image. Never patch licence or plan checks
+   inside `enterprise/`, and never flip `INSTALLATION_PRICING_PLAN` or a
+   `premium` flag. The folder stays in the repository only so upstream syncs
+   merge clean. Fork code must not depend on it: anything the fork needs is
+   reimplemented in `custom/` on the MIT core (the quota endpoint is
+   `Custom::AccountLimitsController`). In development, where the folder is
+   present, `Custom::DashboardController` still reports `IS_ENTERPRISE=false`
+   so paid-only surfaces stay hidden. Captain is forced off per account by the
+   platform too (agentic-str `chatwoot-features.ts`).
+   **After every upstream sync, run the fork suite without the folder**
+   (MIT_ONLY.md §Tests) **and [UPSTREAM_SYNC.md §5b](./UPSTREAM_SYNC.md).**
 7. **Nothing that conflicts with an upstream sync.** Fork changes go in
    fork-only files (`custom/`, `spec/custom/`, `docs/fork/`,
    `config/initializers/custom_prepends.rb`). Before committing, check every
