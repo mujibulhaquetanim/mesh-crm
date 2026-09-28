@@ -40,6 +40,8 @@ PATHS=(
   spec/custom/controllers/api/v1/accounts/vendor_feature_policy_spec.rb
   config/initializers/custom_routes.rb
   scripts/build-ce-image.sh
+  app/javascript/dashboard/routes/dashboard/settings/inbox/ChannelList.vue
+  app/javascript/dashboard/fork/callChannels.js
 )
 
 fresh_tree() {
@@ -101,6 +103,9 @@ run_tree 'fork quota endpoint deleted'; expect_fail 'mit.limits_controller'
 
 fresh_tree; break_file scripts/build-ce-image.sh 's/rm -rf "\$WORK\/enterprise"/true/'
 run_tree 'build stops stripping enterprise/'; expect_fail 'mit.build_strips_enterprise'
+
+fresh_tree; break_file app/javascript/dashboard/routes/dashboard/settings/inbox/ChannelList.vue 's/return withoutUnservedCallChannels\(channels, \{.*?\}\);/return channels;/s'
+run_tree 'sync took upstream ChannelList.vue'; expect_fail 'policy.call_tiles_hidden'
 
 fresh_tree; printf 'module Custom::Foo\n  def bar = Enterprise::Something.call\nend\n' > "$WORK/tree/custom/app/services/custom/foo.rb"
 run_tree 'fork code reaches into enterprise/'; expect_fail 'mit.no_enterprise_dependency'

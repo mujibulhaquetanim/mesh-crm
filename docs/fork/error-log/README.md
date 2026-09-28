@@ -19,6 +19,7 @@ so the same problem is never debugged twice.
 
 Add a line here per entry, newest first:
 
+- [2026-09-28 — Voice and WhatsApp Call tiles shown on the community build: upstream's *Add inbox* list pushes them unconditionally, and every call route is enterprise-only](./2026-09-28-call-tiles-shown-on-the-community-build.md)
 - [2026-09-27 — The fork would not boot without `enterprise/`: upstream's injector assumes `custom/` implies `enterprise/` (`false.const_defined?`)](./2026-09-27-community-edition-boot-fails-with-custom-but-no-enterprise.md)
 - [2026-09-25 — The rebrand was written to the wrong database, and the shared Redis cache made the site look right for exactly one day](./2026-09-25-rebrand-written-to-the-wrong-database.md)
 - [2026-09-24 — Paid-only surfaces (Calls, Settings → Security) visible on the community plan after the v4.18.0 sync: the frontend keyed them on `isEnterprise` alone](./2026-09-24-paid-only-surfaces-visible-on-the-community-plan.md)

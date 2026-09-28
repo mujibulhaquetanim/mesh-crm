@@ -28,6 +28,7 @@ listed here, and keys the exception off the persisted `platform_managed` flag
 | **Dialogflow integration** | A second bot answering customers by itself | same as above | same as above, and `Custom::Integrations::Hook#disabled?` stops hooks created before the policy from firing |
 | **Captain** (Chatwoot's own AI) | same reason | the platform forces every `captain_*` account flag false | not reachable without the flag. Captain is enterprise, and paid features stay hidden (UPSTREAM_SYNC.md §5b) |
 | **Paid-only surfaces** (Calls, Security/SAML, SLA, Audit logs, Custom roles) | no licence | `IS_ENTERPRISE=false` to the frontend (`Custom::DashboardController`) | upstream's own licence checks |
+| **Voice and WhatsApp Call tiles** in *Add inbox* | calling is enterprise-only, and production has no `enterprise/`, so a call could never ring | `dashboard/fork/callChannels.js`, called from `ChannelList.vue` (the one list upstream never gated) | nothing to refuse: the call routes aren't drawn without `enterprise/` (404) |
 
 The one list both layers read is `Custom::VendorFeaturePolicy`
 (`custom/app/services/custom/vendor_feature_policy.rb`). A refusal answers:

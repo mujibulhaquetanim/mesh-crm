@@ -76,6 +76,14 @@ POLICY_REQUIREMENTS = [
      r'IS_ENTERPRISE: false', 'paid-only surfaces would show on the community plan'),
     ('policy.enterprise_registered', 'config/initializers/custom_prepends.rb',
      r'DashboardController,\s*Custom::DashboardController', 'the dashboard overlay is not registered'),
+    # Upstream's "Add inbox" list pushes the Voice and WhatsApp Call tiles
+    # unconditionally; calling needs enterprise/, which production doesn't ship.
+    # A sync that takes upstream's ChannelList.vue drops this one-line hunk.
+    ('policy.call_tiles_hidden', 'app/javascript/dashboard/routes/dashboard/settings/inbox/ChannelList.vue',
+     r'return withoutUnservedCallChannels\(channels,',
+     'the Voice / WhatsApp Call tiles would show on the community build, where calls cannot ring'),
+    ('policy.call_tiles_rule', 'app/javascript/dashboard/fork/callChannels.js',
+     r"CALL_CHANNEL_KEYS = \['voice', 'whatsapp_call'\]", 'the call-channel filter is gone or changed'),
     # MIT-only production (docs/fork/MIT_ONLY.md): the quota endpoint is fork
     # code on the MIT core, and the build strips enterprise/.
     ('mit.limits_controller', 'custom/app/controllers/custom/account_limits_controller.rb',
