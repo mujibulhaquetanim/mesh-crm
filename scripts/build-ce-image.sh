@@ -15,6 +15,10 @@
 # upstream's own CE image uses (.github/workflows/publish_foss_docker.yml).
 #
 # Steps, each one stopping the script on failure:
+#   0. the owner's rebuild rule (docs/fork/README.md ground rule 9): <sha> must
+#      carry upstream/develop's latest, and every paid feature upstream moved
+#      into the MIT core since the last review must have been made available
+#      (scripts/fork-policy/core-moves.py, UPSTREAM_SYNC.md §5c)
 #   1. fresh clone at <sha> (never the working checkout: untracked folders would
 #      land in the image)
 #   2. fork policy check on the clone (brand + vendor feature policy)
@@ -32,6 +36,10 @@ REPO="$(git rev-parse --show-toplevel)"
 WORK="${BUILD_DIR:-/tmp/mesh-crm-build}"
 LOG="${WORK}.log"
 TAG="mesh-crm:${SHA}"
+
+echo "0/5 synced with upstream, and nothing freed by upstream left switched off"
+git -C "$REPO" fetch -q upstream develop
+python3 "$REPO/scripts/fork-policy/core-moves.py" --ref "$SHA" --require-synced
 
 echo "1/5 fresh clone at ${SHA} → ${WORK}"
 rm -rf "$WORK"

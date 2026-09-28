@@ -963,6 +963,56 @@ The backend keeps `enterprise?` true, so quotas keep working. Do **not**
    community feature. The ones that must never appear are Captain, Calls,
    and Settings → Security / SLA / Audit logs / Custom roles.
 
+## 5c. Features upstream frees into the core get switched on (every sync AND every rebuild)
+
+**The owner's rule (2026-09-28), README ground rule 9:** before every rebuild,
+sync with upstream Chatwoot, run the checks, and look for any feature that used
+to be enterprise-only and is now in the community core. If there is one, make
+it available. Production is MIT-only (MIT_ONLY.md), so a freed feature is ours
+to use as soon as the sync lands, but nothing switches it on: Companies moved
+into core on 2026-09-24 (§3h) and stayed off for every account for four days.
+
+**The tool:** `scripts/fork-policy/core-moves.py`. It compares the upstream
+commit last reviewed (`scripts/fork-policy/core-moves.reviewed`) with the one
+merged into the ref, and prints two kinds of move:
+
+- `flag`: a `config/features.yml` entry that lost `premium: true`;
+- `code`: files git sees renamed out of `enterprise/` into the core, grouped by
+  the model they moved with.
+
+`scripts/build-ce-image.sh` step 0 runs it with `--require-synced`, so a
+build **fails** when the SHA doesn't contain `upstream/develop`, or when a move
+hasn't been reviewed. `check.py` fails if that step is removed from the script.
+
+**For each move, in the sync PR:**
+
+1. **Is it a second AI, reply path or knowledge base?** Then it stays off
+   under the vendor feature policy (VENDOR_FEATURE_POLICY.md, ground rule 8),
+   exactly as Captain is. Write that down in the sync section. Anything else is
+   switched on.
+2. **Switch it on for tenants.** Account flags are the platform's job: add the
+   flag as `true` to agentic-str `apps/api/src/chatwoot/chatwoot-features.ts`
+   (and its spec) in a PR linked from the sync section. Existing accounts get
+   it from `backfill:chatwoot-features` after that API release.
+3. **Remove any fork hiding.** If a fork file hid the feature (a filter, an
+   overlay reading a flag as off), delete or relax it. Calling needs nothing:
+   `Custom::Account#feature_channel_voice?` and `dashboard/fork/callChannels.js`
+   key on "is the `Call` model loadable", so they open by themselves.
+4. **Tell the owner.** A newly available feature may be worth a line on the
+   public site (agentic-str `apps/web`). The owner decides that, and the claim
+   must be true on production first.
+5. `python3 scripts/fork-policy/core-moves.py --mark`, then commit the marker
+   with the change that acts on the move.
+
+**Still `premium: true` but with no enterprise code** (measured 2026-09-28):
+`disable_branding` and `advanced_search`. These don't count as moves: upstream
+still sells them. Ground rule 6 forbids flipping a premium flag, so each one
+needs the owner's decision.
+
+**Measured on the first run (2026-09-28, fork point `926a9d8a69` → `b8eb7766f2`):**
+one move, Companies (`flag companies` plus 29 files). Switched on by agentic-str
+`chatwoot-features.ts` (`companies: true`). Marker set to `b8eb7766f2`.
+
 ## 4. The guards that stop you pushing fork code into Chatwoot
 
 Two guards were installed on **2026-07-08** so your project code can never
@@ -1064,6 +1114,9 @@ rg -n --color=never "name: captain" config/features.yml
 # dropped prepend_mod_with an overlay loads through, or a missing policy piece;
 # warns on a new integration app to classify. Also the pre-push hook.
 python3 scripts/fork-policy/check.py           # RESULT: ok to ship
+# Paid features upstream freed into the core (§5c): act on each MOVE in this
+# PR, then --mark and commit the marker. The build refuses otherwise.
+python3 scripts/fork-policy/core-moves.py --require-synced   # RESULT: ok to build
 git push origin develop                # fork only
 ```
 

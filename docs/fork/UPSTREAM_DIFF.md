@@ -65,7 +65,7 @@ pulling future upstream releases. It is generated from an actual
 | Bootstrap | `config/application.rb` | trivial (adjacent to enterprise lines) | eager-load + view path for `custom/` |
 | Meta webhook / secret hardening | `app/views/api/v1/models/_inbox.json.jbuilder` (1 line + comment) | **moderate** — high-churn upstream file, but the edit is one call site; re-apply it if a merge takes upstream's version ([§4.2](#42-the-one-app-views-edit-inboxjsonjbuilder)) | redacting reader for `provider_config`; the signature half needs no OSS edit at all |
 | Super Admin hardening | `config/routes.rb` (1 line), `config/initializers/rack_attack.rb` (1 block) | **moderate** — both are high-churn upstream files, but each edit is a single contiguous, heavily commented hunk on the `/super_admin` scope only, so a conflict resolves by re-applying it ([§4.1](#41-the-two-super_admin-hardening-edits)) | `skip: [:registrations]` on the operator scope + a password-reset throttle |
-| Frontend integration | ~13 OSS Vue/JS files | low (additive, isolated) | banner mount, quota UI, SSO redirect |
+| Frontend integration | ~14 OSS Vue/JS files | low (additive, isolated) | banner mount, quota UI, SSO redirect, call tiles hidden on CE |
 | Branding | `config/locales/en.yml` + ~16 `en*.json`/Vue literals | low (value-only swaps) | "Chatwoot" → "Mesh CRM" display copy |
 | Dev env & tooling | `docker-compose.yaml`, `.devcontainer/devcontainer.json`, `config/database.yml`, `AGENTS.md` (+ net-new `docker-compose.rspec.yaml`) | **moderate** — the largest conflict surface after `db/schema.rb`; upstream edits these occasionally | Docker-only Neon/Upstash dev stack; no runtime behavior ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
 | Spec adjustments | `spec/enterprise/.../accounts/agents_controller_spec.rb`, `spec/controllers/webhooks/whatsapp_controller_spec.rb` | low | setups narrowed to what the fork's guards allow — cap-exact agent creation, and an unsigned-webhook pin that now also unsets the global app secret ([§6](#6-dev-environment-tooling-and-spec-adjustments)) |
@@ -101,6 +101,19 @@ Everything here is net-new; pulling upstream can never conflict with it.
     upstream answers 200. 25 upstream examples fail because of it, listed in
     `VENDOR_FEATURE_POLICY.md`. Upstream specs are NOT edited.
     `scripts/fork-policy/` (check, self-test, hook installer) is fork-only too.
+  - **Calling flag made truthful (2026-09-28):** `custom/app/models/custom/account.rb`
+    (on upstream's existing `Account.prepend_mod_with('Account')`, and also the
+    namespace of `Custom::Account::PlanUsageAndLimits`).
+    `feature_channel_voice?` is false while no `Call` model is loadable, which
+    is every MIT-only build. **This changes upstream behaviour:** an account
+    with the `channel_voice` bit set no longer reports the feature on a build
+    without `enterprise/`. Upstream would report it, and every call surface
+    would then 404. Spec `spec/custom/models/account_channel_voice_spec.rb`,
+    check `policy.voice_flag_served`.
+  - **Rebuild gate (2026-09-28, README ground rule 9):**
+    `scripts/fork-policy/core-moves.py` plus the marker
+    `scripts/fork-policy/core-moves.reviewed`, run as step 0 of
+    `scripts/build-ce-image.sh`. See UPSTREAM_SYNC.md §5c.
   - Platform-managed flag permit: `custom/app/controllers/custom/platform/api/v1/account_users_controller.rb`.
   - Platform account merge-patch: `custom/app/controllers/custom/platform/api/v1/accounts_controller.rb`
     (`custom_attributes` on update is RFC 7386-style merge-patch so the control
@@ -555,6 +568,18 @@ all are **additive and inert by default**:
   `window.globalConfig?.EXTERNAL_LOGIN_URL` (populated by
   `DashboardController#app_config`) and bounces bare/expired logins to the
   external app. Empty config → no redirect.
+- **Call tiles hidden on the community build (2026-09-28)** —
+  `app/javascript/dashboard/routes/dashboard/settings/inbox/ChannelList.vue`
+  (+1 import, `return channels;` →
+  `return withoutUnservedCallChannels(channels, …)`). The rule lives in the
+  fork-only `app/javascript/dashboard/fork/callChannels.js`: drop the Voice and
+  WhatsApp Call tiles unless `isOnChatwootCloud || channel_voice`. The flag
+  itself is made truthful by the `Custom::Account` overlay (§2). **Not inert:**
+  where the flag is off, upstream shows the two tiles as "Coming soon" or "Beta"
+  and the fork hides them. Everything they lead to is enterprise-only, and
+  those routes aren't drawn without the folder (error-log 2026-09-28). ⚠ If a sync conflicts here, keep
+  upstream's list and re-apply the `return` line. `check.py`
+  `policy.call_tiles_hidden` fails if it is lost.
 - **`EXTERNAL_LOGIN_URL` exposure** — `app/controllers/dashboard_controller.rb`
   (+1): one additive key in `app_config`, defaulting to `''`.
 - **Branding copy** — `config/locales/en.yml` (new `errors.quota.*` /

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 import { useMapGetter } from 'dashboard/composables/store';
 
 import { useAccount } from 'dashboard/composables/useAccount';
+import { withoutUnservedCallChannels } from 'dashboard/fork/callChannels';
 
 import ChannelItem from 'dashboard/components/widgets/ChannelItem.vue';
 
@@ -107,7 +108,11 @@ const channelList = computed(() => {
     icon: 'i-woot-whatsapp',
   });
 
-  return channels;
+  // Zasmate fork: no call tiles where calls can't ring (dashboard/fork/callChannels.js).
+  return withoutUnservedCallChannels(channels, {
+    isOnChatwootCloud: isOnChatwootCloud.value,
+    callsEnabled: !!enabledFeatures.value.channel_voice,
+  });
 });
 
 const initChannelAuth = channel => {
