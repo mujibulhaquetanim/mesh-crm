@@ -133,7 +133,12 @@ Read in this order:
    (`scripts/build-ce-image.sh`, see **[MIT_ONLY.md](./MIT_ONLY.md)**), the same
    way upstream builds its community image. Never patch licence or plan checks
    inside `enterprise/`, and never flip `INSTALLATION_PRICING_PLAN` or a
-   `premium` flag. The folder stays in the repository only so upstream syncs
+   `premium` flag. **One exception (owner, 2026-09-28):** a `premium` flag
+   whose code is *entirely* in the MIT core (no `enterprise/` file implements
+   or overlays it) may be switched on for accounts by the owner's decision.
+   Upstream's premium enforcement lives in `enterprise/`, which we don't ship,
+   and the gated code is MIT. So far: `disable_branding`, `advanced_search`
+   (UPSTREAM_SYNC.md §5c). The folder stays in the repository only so upstream syncs
    merge clean. Fork code must not depend on it: anything the fork needs is
    reimplemented in `custom/` on the MIT core (the quota endpoint is
    `Custom::AccountLimitsController`). In development, where the folder is

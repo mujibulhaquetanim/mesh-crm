@@ -1004,10 +1004,22 @@ hasn't been reviewed. `check.py` fails if that step is removed from the script.
 5. `python3 scripts/fork-policy/core-moves.py --mark`, then commit the marker
    with the change that acts on the move.
 
-**Still `premium: true` but with no enterprise code** (measured 2026-09-28):
-`disable_branding` and `advanced_search`. These don't count as moves: upstream
-still sells them. Ground rule 6 forbids flipping a premium flag, so each one
-needs the owner's decision.
+**Still `premium: true` but with no enterprise code.** `core-moves.py` does NOT
+report these, because the flag keeps `premium`. **Look for them on every sync.**
+The owner's exception to ground rule 6 (2026-09-28) lets each one be switched
+on, the same way as a move, once it's confirmed:
+- no `enterprise/` file implements or overlays what the flag gates (check the
+  `prepend_mod_with` target too);
+- the core path works without enterprise-only services.
+
+Switched on so far, by the owner on 2026-09-28 (agentic-str
+`chatwoot-features.ts`; accounts 1–4 directly):
+- `disable_branding`: hides the "Made with Zasmate" link in the vendor's
+  widget and help-center footer. That is our attribution, and the owner
+  accepted losing it.
+- `advanced_search`: SQL date, sender and inbox filters in `SearchService`. The
+  Elasticsearch path needs `enterprise?` plus `OPENSEARCH_URL`, so it never
+  runs here.
 
 **Measured on the first run (2026-09-28, fork point `926a9d8a69` → `b8eb7766f2`):**
 one move, Companies (`flag companies` plus 29 files). Switched on by agentic-str
