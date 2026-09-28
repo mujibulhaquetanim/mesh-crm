@@ -83,7 +83,9 @@ docker compose run --rm -T vite sh -c 'pnpm exec vitest run app/javascript/dashb
 python3 scripts/fork-policy/check.py        # 86 passed, 0 failed — RESULT: ok to ship
 bash scripts/fork-policy/check.test.sh      # 23 passed, 0 failed
 # spec/custom, development tree (enterprise/ present): 300 examples, 0 failures
-# spec/custom, CE tree (MIT_ONLY.md §Tests):            see the PR body
+# spec/custom, CE tree (MIT_ONLY.md §Tests):            300 examples, 0 failures, 1 pending
+#   (the pending one is the known enterprise-schema tripwire); zeitwerk:check "All is good!";
+#   rails runner: Custom::Account.calls_served? => false, ChatwootApp.enterprise? => false
 ```
 
 Proven:
@@ -94,11 +96,21 @@ Proven:
 - `spec/custom/models/account_channel_voice_spec.rb` asserts, unstubbed, that
   `calls_served?` equals `ChatwootApp.enterprise?`. That holds in both trees.
 
-After release:
-- Sign in as a vendor on a Pro-plan account and open *Add inbox*: there are no
-  Voice or WhatsApp Call tiles.
-- A conversation header has no call button.
-- A WhatsApp inbox's settings have no Calls tab.
+**Released 2026-09-28 ~09:03 UTC** as `mesh-crm:f9ec7f401c` (digest
+`sha256:7e8c7327aaa4…`, together with #52). Measured from outside after the release:
+
+- The build's step `0/5` said `synced with upstream/develop` and
+  `nothing moved from enterprise/ into core since b8eb7766f2`.
+- `check.py --live https://inbox.zasmate.com`: 14 passed, 0 failed.
+- `/api/v1/accounts/1/calls` and `/whatsapp_calls/1` still 404, and
+  `/inboxes` 401. The fix hides the UI; the routes were never drawn.
+- All 5 sampled `/vite/assets/*.js` served by `/app/login` exist in the image. The
+  `['voice','whatsapp_call']` filter is in the built bundle.
+
+**Not yet done:** the signed-in check. Sign in as a vendor on a Pro-plan account
+and confirm there are no Voice or WhatsApp Call tiles in *Add inbox*, no call
+button in a conversation header, and no Calls tab in a WhatsApp inbox's
+settings. It needs a vendor session, which no one had during the release.
 
 ## Notes / related
 
