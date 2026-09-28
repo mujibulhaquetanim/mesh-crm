@@ -107,10 +107,12 @@ Proven:
 - All 5 sampled `/vite/assets/*.js` served by `/app/login` exist in the image. The
   `['voice','whatsapp_call']` filter is in the built bundle.
 
-**Not yet done:** the signed-in check. Sign in as a vendor on a Pro-plan account
-and confirm there are no Voice or WhatsApp Call tiles in *Add inbox*, no call
-button in a conversation header, and no Calls tab in a WhatsApp inbox's
-settings. It needs a vendor session, which no one had during the release.
+**Signed-in check (2026-09-29):** the owner looked at the production inbox
+signed in. *Add inbox* shows **no Voice or WhatsApp Call tile**, which was the
+symptom that opened this entry. The conversation call button and the WhatsApp
+Calls tab weren't reported separately. They read the same `channel_voice` flag,
+which production reports off for all 4 accounts (the bit is stored only on
+account 1).
 
 ## Notes / related
 
