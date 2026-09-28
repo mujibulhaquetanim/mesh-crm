@@ -8,7 +8,7 @@ import {
 } from '../callChannels';
 
 const mocks = vi.hoisted(() => ({
-  isEnterprise: false,
+  features: {},
   isOnChatwootCloud: false,
 }));
 
@@ -20,12 +20,9 @@ vi.mock('dashboard/composables/store', () => ({
 vi.mock('dashboard/composables/useAccount', () => ({
   useAccount: () => ({
     accountId: computed(() => 1),
-    currentAccount: computed(() => ({ features: { channel_voice: true } })),
+    currentAccount: computed(() => ({ features: mocks.features })),
     isOnChatwootCloud: computed(() => mocks.isOnChatwootCloud),
   }),
-}));
-vi.mock('dashboard/composables/useConfig', () => ({
-  useConfig: () => ({ isEnterprise: mocks.isEnterprise }),
 }));
 
 const ChannelItemStub = {
@@ -46,11 +43,11 @@ const renderedKeys = () =>
 
 describe('Add inbox channel list (fork: call channels)', () => {
   beforeEach(() => {
-    mocks.isEnterprise = false;
+    mocks.features = {};
     mocks.isOnChatwootCloud = false;
   });
 
-  it('hides Voice and WhatsApp Call on the community build, even with channel_voice on', () => {
+  it('hides Voice and WhatsApp Call when the account cannot place calls', () => {
     const keys = renderedKeys();
 
     CALL_CHANNEL_KEYS.forEach(key => expect(keys).not.toContain(key));
@@ -58,13 +55,13 @@ describe('Add inbox channel list (fork: call channels)', () => {
     expect(keys).toContain('sms');
   });
 
-  it('shows them where the enterprise backend serves calls', () => {
-    mocks.isEnterprise = true;
+  it('shows them when channel_voice is on (the build serves calls)', () => {
+    mocks.features = { channel_voice: true };
 
     expect(renderedKeys()).toEqual(expect.arrayContaining(CALL_CHANNEL_KEYS));
   });
 
-  it('shows them on Chatwoot Cloud', () => {
+  it('keeps upstream behaviour on Chatwoot Cloud', () => {
     mocks.isOnChatwootCloud = true;
 
     expect(renderedKeys()).toEqual(expect.arrayContaining(CALL_CHANNEL_KEYS));
@@ -82,7 +79,7 @@ describe('withoutUnservedCallChannels', () => {
     expect(
       withoutUnservedCallChannels(channels, {
         isOnChatwootCloud: false,
-        isEnterprise: false,
+        callsEnabled: false,
       })
     ).toEqual([{ key: 'whatsapp' }]);
   });
@@ -91,7 +88,7 @@ describe('withoutUnservedCallChannels', () => {
     expect(
       withoutUnservedCallChannels(channels, {
         isOnChatwootCloud: false,
-        isEnterprise: true,
+        callsEnabled: true,
       })
     ).toBe(channels);
   });

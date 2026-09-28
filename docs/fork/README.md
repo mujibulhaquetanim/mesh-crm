@@ -157,3 +157,12 @@ Read in this order:
    every rebuild, and with `--live` against the running inbox after every
    release. **[VENDOR_FEATURE_POLICY.md](./VENDOR_FEATURE_POLICY.md)** has the
    list, the reasons, and how to add a feature.
+9. **Every rebuild: sync first, check, and switch on what upstream freed.**
+   The owner's rule (2026-09-28). Before any image build, merge upstream
+   Chatwoot's latest `develop` (UPSTREAM_SYNC.md §6), run `check.py`, and
+   review every paid feature upstream moved from `enterprise/` into the MIT
+   core. Each one is made available to vendors unless it is a second AI, reply
+   path or knowledge base (rule 8). `scripts/build-ce-image.sh` enforces this:
+   its step 0 runs `scripts/fork-policy/core-moves.py --require-synced` and
+   stops the build on an unsynced SHA or an unreviewed move. The procedure is
+   **[UPSTREAM_SYNC.md §5c](./UPSTREAM_SYNC.md)**.

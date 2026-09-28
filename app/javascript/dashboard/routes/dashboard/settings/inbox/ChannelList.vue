@@ -5,7 +5,6 @@ import { useRouter } from 'vue-router';
 import { useMapGetter } from 'dashboard/composables/store';
 
 import { useAccount } from 'dashboard/composables/useAccount';
-import { useConfig } from 'dashboard/composables/useConfig';
 import { withoutUnservedCallChannels } from 'dashboard/fork/callChannels';
 
 import ChannelItem from 'dashboard/components/widgets/ChannelItem.vue';
@@ -13,7 +12,6 @@ import ChannelItem from 'dashboard/components/widgets/ChannelItem.vue';
 const { t } = useI18n();
 const router = useRouter();
 const { accountId, currentAccount, isOnChatwootCloud } = useAccount();
-const { isEnterprise } = useConfig();
 
 const globalConfig = useMapGetter('globalConfig/get');
 
@@ -110,10 +108,10 @@ const channelList = computed(() => {
     icon: 'i-woot-whatsapp',
   });
 
-  // Zasmate fork: calling needs the enterprise backend (dashboard/fork/callChannels.js).
+  // Zasmate fork: no call tiles where calls can't ring (dashboard/fork/callChannels.js).
   return withoutUnservedCallChannels(channels, {
     isOnChatwootCloud: isOnChatwootCloud.value,
-    isEnterprise,
+    callsEnabled: !!enabledFeatures.value.channel_voice,
   });
 });
 

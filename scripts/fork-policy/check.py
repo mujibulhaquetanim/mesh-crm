@@ -84,6 +84,9 @@ POLICY_REQUIREMENTS = [
      'the Voice / WhatsApp Call tiles would show on the community build, where calls cannot ring'),
     ('policy.call_tiles_rule', 'app/javascript/dashboard/fork/callChannels.js',
      r"CALL_CHANNEL_KEYS = \['voice', 'whatsapp_call'\]", 'the call-channel filter is gone or changed'),
+    ('policy.voice_flag_served', 'custom/app/models/custom/account.rb',
+     r'def feature_channel_voice\?\s*\n\s*Custom::Account\.calls_served\? && super',
+     'channel_voice would switch on call buttons and tabs a build without the Call model cannot serve'),
     # MIT-only production (docs/fork/MIT_ONLY.md): the quota endpoint is fork
     # code on the MIT core, and the build strips enterprise/.
     ('mit.limits_controller', 'custom/app/controllers/custom/account_limits_controller.rb',
@@ -95,6 +98,13 @@ POLICY_REQUIREMENTS = [
      r'rm -rf "\$WORK/enterprise"', 'the build no longer strips enterprise/ — licensed code would ship'),
     ('mit.build_verifies_image', 'scripts/build-ce-image.sh',
      r'/app/enterprise', 'the build no longer proves the image has no enterprise/'),
+    # The owner's rebuild rule (README ground rule 9): synced with upstream, and
+    # every paid feature upstream freed into the core made available.
+    ('mit.build_gates_core_moves', 'scripts/build-ce-image.sh',
+     r'core-moves\.py" --ref "\$SHA" --require-synced',
+     'the build no longer requires an upstream sync and a review of features upstream freed'),
+    ('mit.core_moves_marker', 'scripts/fork-policy/core-moves.reviewed',
+     r'^[0-9a-f]{40}$', 'no reviewed-upstream marker: the build gate cannot tell what was already reviewed'),
     ('policy.spec', 'spec/custom/controllers/api/v1/accounts/vendor_feature_policy_spec.rb',
      r"feature_managed_by_platform", 'the policy spec is gone'),
     # The upstream extension points the overlays above load through.
@@ -106,6 +116,8 @@ POLICY_REQUIREMENTS = [
      r"prepend_mod_with\('Api::V1::Accounts::Integrations::HooksController'\)", 'upstream dropped the extension point'),
     ('policy.hook_point', 'app/models/integrations/hook.rb',
      r"prepend_mod_with\('Integrations::Hook'\)", 'upstream dropped the extension point'),
+    ('policy.hook_point', 'app/models/account.rb',
+     r"^Account\.prepend_mod_with\('Account'\)", 'upstream dropped the extension point'),
 ]
 
 
