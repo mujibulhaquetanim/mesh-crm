@@ -121,4 +121,6 @@ settings. It needs a vendor session, which no one had during the release.
   `settings/inbox/components/specs/TwilioHealth.spec.js` › "uses the installation
   name instead of ours in the health copy" fails. The copy says a literal
   "Zasmate" where the spec expects the installation name. It fails identically
-  without this change.
+  without this change. **Resolved as an expected failure** (the brand rule vs.
+  upstream's runtime "Chatwoot" swap). The full suite has no other failure. See
+  VENDOR_FEATURE_POLICY.md, "The one frontend spec the brand rule fails on purpose".

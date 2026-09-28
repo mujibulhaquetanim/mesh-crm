@@ -129,6 +129,32 @@ spec/listeners/hook_listener_spec.rb:74 # HookListener hook job enqueuing behavi
 ```
 <!-- EXPECTED-UPSTREAM-FAILURES:END -->
 
+### The one frontend spec the brand rule fails on purpose
+
+Measured 2026-09-28 with the full vitest suite (`docker compose run --rm -T vite
+sh -c 'pnpm exec vitest run'`): **4895 passed, 1 failed** (468 files). The one
+failure:
+
+```text
+app/javascript/dashboard/routes/dashboard/settings/inbox/components/specs/TwilioHealth.spec.js
+  › TwilioHealth › uses the installation name instead of ours in the health copy
+```
+
+**Why it fails:** upstream writes the Twilio health copy with the literal word
+"Chatwoot", and `TwilioHealth.vue` swaps it at runtime with
+`replaceInstallationName`. The brand rule (`check.py` `brand.locale`) forbids
+"Chatwoot" in `en` strings, so the fork's copy already says "Zasmate" and the
+runtime swap has nothing to replace. The spec mounts with the installation name
+"Acme Desk" and doesn't find it.
+
+**Why that's acceptable:** production's installation name *is* Zasmate, so what
+vendors see is identical. The trade-off is the one every fork brand string
+already makes: the copy is static rather than following `INSTALLATION_NAME`.
+
+**Don't** edit the spec (an upstream file) or restore "Chatwoot" in the
+locale (the brand check would fail). If a sync shows any *other* vitest
+failure, it's a real regression.
+
 ## Adding a feature to the policy
 
 1. Decide it with the owner: does it duplicate something the platform owns
