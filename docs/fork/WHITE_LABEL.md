@@ -278,3 +278,46 @@ Not touched, deliberately:
   `InstallationConfig` ROWS; this YAML only seeds a fresh install. A running
   instance keeps whatever is in its table until those rows are updated. See
   `docs/fork/REBRAND_PRODUCTION.md`.
+
+---
+
+## Status — orange rebrand (2026-09-28)
+
+The owner replaced the artwork: an orange "Z" with a sparkle, and an orange
+ZASMATE wordmark, both as PNGs on a **transparent** background (the same files
+as agentic-str's `docs/logo_photos/`). The palette is the `#F5930D → #E8640A`
+gradient, `#F87D13`, white and `#292929`. The web app moved to it in
+agentic-str #433; this pass moves the inbox.
+
+- `docs/brand/zasmate-mark.png` and `zasmate-wordmark.png` replace the two
+  JPEG masters.
+- `scripts/brand/generate-icons.sh` no longer keys anything out. It crops each
+  master to its artwork with an alpha threshold (a plain `-trim` would keep the
+  near-transparent specks the masters carry), pads the mark 8% inside its
+  square, and regenerates the same filenames at the same sizes as before.
+  - The floodfill note above is history: it applied to the opaque JPEG masters.
+  - The unread badge dot now has a white ring, so it separates from the orange.
+- `logo_dark.svg` is the same artwork as `logo.svg`, since the orange reads on
+  a dark surface. The geometric tagline repaint above is gone with the
+  tagline. The file stays separate because `LOGO_DARK` points at it.
+- `public/manifest.json`, `app/views/layouts/vueapp.html.erb` and the fallback
+  in `app/javascript/dashboard/components-next/icon/Logo.vue` move from cyan
+  `#19A6D3` to `#F87D13`. These lines were already the fork's own, so upstream
+  sees no new conflict surface.
+- `spec/brand/brand_assets_spec.rb` no longer counts the white Z, which the new
+  mark doesn't have. It counts the two things that separate real artwork from
+  a bad export:
+  - opaque orange pixels: at least 10%, measured at 14.65% (32×32) to 26.08%
+    (512×512);
+  - fully transparent corners on every plain icon.
+
+  It was verified red by flattening one icon onto white (its corners became
+  opaque) and blanking another (0.0% orange): 2 failures, then 6/6 once
+  restored.
+
+Unchanged: `#2781F6` in email templates, portal colours and the like, for the
+same reason as above.
+
+The running inbox only picks this up after an image rebuild
+(`scripts/build-ce-image.sh`) and a release. The `LOGO*` rows already point at
+`/brand-assets/*.svg`, so no DB change is needed.
