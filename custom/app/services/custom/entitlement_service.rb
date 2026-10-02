@@ -10,7 +10,7 @@ class Custom::EntitlementService
   # tenant-billable seats. They carry `platform_managed: true` and are excluded
   # from every usage count, so a tenant is never charged a plan slot for the
   # platform's own automation. Tenant-created resources (default
-  # `platform_managed: false`) count as before. See docs/fork/adr/0002.
+  # `platform_managed: false`) count as before.
   RESOURCE_COUNTERS = {
     agents: ->(account) { account.account_users.where(platform_managed: false).count },
     teams: ->(account) { account.teams.count },

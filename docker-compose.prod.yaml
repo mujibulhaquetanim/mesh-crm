@@ -1,5 +1,5 @@
-# Production mesh-crm: THE FORK, against Neon, on one VPS beside the platform
-# API and dashboard (agentic-str D-033).
+# Production: THE FORK, against an external managed Postgres, on one host
+# beside the platform's own services.
 #
 #   docker compose -f docker-compose.prod.yaml up -d
 #
@@ -10,18 +10,16 @@
 # │ image, with NONE of the `custom/` overlay. Running it in production would │
 # │ ship: no super-admin MFA, no billable-seat quota fix, no                  │
 # │ `platform_managed` webhook serialization, and none of the                 │
-# │ `UNIQUE (page_id)` Facebook-Page fan-out fix (PR #24) — the defect that   │
-# │ let one Page reach every account.                                         │
+# │ `UNIQUE (page_id)` Facebook-Page fan-out fix — the defect that let one    │
+# │ Page reach every account.                                                 │
 # │                                                                          │
 # │ It also ships its own `postgres` service, which production does not use.  │
 # │                                                                          │
 # │ This file is `docker-compose.prod-local.yaml` with the throwaway database │
-# │ swapped for Neon. Keep the two in step: prod-local is where the boot is   │
-# │ rehearsed, so a difference between them is a difference nobody tested.    │
-# │                                                                          │
-# │ ⚠ ONE difference is now deliberate: prod-local is reached by the local    │
-# │ Cloudflare tunnel, production by Caddy on the VPS. Everything about the   │
-# │ app's own boot is still identical, which is what the rehearsal proves.    │
+# │ swapped for the managed one. Keep the two in step: prod-local is where    │
+# │ the boot is rehearsed, so a difference between them is a difference      │
+# │ nobody tested. The one deliberate difference is how each is reached from  │
+# │ outside; everything about the app's own boot is identical.                │
 # └──────────────────────────────────────────────────────────────────────────┘
 
 # ⚠ A DISTINCT PROJECT NAME. Compose derives it from the directory, so all four
@@ -34,7 +32,7 @@ x-app: &app
   # Built from THIS repo, never pulled:
   # `docker build -f docker/Dockerfile -t mesh-crm:production .`
   # ⚠ `-f` is REQUIRED — there is no Dockerfile at the repo root.
-  # — see docs/fork/DEV_SETUP.md for the build, which must run before this file.
+  # The build must run before this file.
   image: mesh-crm:production
   env_file: .env
   environment: &app-env
@@ -46,22 +44,16 @@ x-app: &app
     INSTALLATION_ENV: docker
     RAILS_LOG_TO_STDOUT: 'true'
 
-    # ── The database: Neon `mesh-inbox`. NOT the platform's `mesh-api`.
-    # (Both projects live in eu-central-1/Frankfurt. They were `meta-crm` and
-    # `neondb` in ap-southeast-1 until 2026-09-14 — those names are dead.)
-    #
-    # ⚠ These are two different Neon databases and confusing them is
-    # destructive in both directions: `prisma migrate deploy` against mesh-inbox
-    # would apply the platform's schema over Chatwoot's, and Rails migrations
-    # against mesh-api would do the reverse. agentic-str's deploy.yml carries the
-    # same warning from the other side.
+    # ── The database: this application's own managed Postgres database, never
+    # one another application migrates. Confusing them is destructive in both
+    # directions: each side's migrations would apply over the other's schema.
     #
     # `DATABASE_URL` takes precedence over the individual POSTGRES_* params
     # (docker/entrypoints/helpers/pg_database_url.rb relies on that), so it is
     # the single place the connection is decided. ⚠ `sslmode=verify-full` belongs on
     # the URL itself, not only in database.yml — an explicit DATABASE_URL
-    # overrides that file's merge, and Neon refuses a non-SSL connection.
-    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — the Neon mesh-inbox connection string, sslmode=verify-full}
+    # overrides that file's merge, and the provider refuses a non-SSL connection.
+    DATABASE_URL: ${CRM_DATABASE_URL:?CRM_DATABASE_URL is not set — this application's Postgres connection string, sslmode=verify-full}
     # verify-full, not require: `require` encrypts but does NOT verify the server
     # certificate, so it does not stop a MITM. The image ships a CA bundle
     # (ca-certificates, /etc/ssl/certs/ca-certificates.crt), so verification works.
@@ -69,7 +61,7 @@ x-app: &app
     POSTGRES_SSLMODE: verify-full
 
     # ── Redis: this stack's OWN container, for Sidekiq.
-    # Separate from the platform's BullMQ Redis by design (D-033 §4): different
+    # Separate from any other application's Redis by design: different
     # persistence needs, and a FLUSHALL from either side would take the other's
     # in-flight jobs.
     REDIS_URL: redis://redis:6379
@@ -80,18 +72,16 @@ x-app: &app
     # ── Where the app thinks it lives. PUBLIC hostname, always.
     # Meta's OAuth callbacks are made by Meta's servers, so a container or
     # loopback address is unreachable to them and channel connection cannot
-    # complete (troubleshooting/039).
-    FRONTEND_URL: ${CRM_FRONTEND_URL:?CRM_FRONTEND_URL is not set — the public https origin, e.g. https://mesh-crm.example.com}
+    # complete.
+    FRONTEND_URL: ${CRM_FRONTEND_URL:?CRM_FRONTEND_URL is not set — the public https origin, e.g. https://inbox.example.com}
 
     # ── Object storage.
     #
-    # ⚠ CORRECTED 2026-09-14. This said "`local` would put attachments on a
-    # container filesystem that every redeploy discards" — that is FALSE here:
-    # `prod_storage:/app/storage` is mounted on both rails and sidekiq below, so
-    # `local` DOES survive redeploys. The real objection to `local` is different
-    # and weaker: the volume sits on ONE box with no backup, and migrating to R2
-    # later means updating `active_storage_blobs.service_name` on every row,
-    # whereas an s3_compatible endpoint swap needs no database change at all.
+    # `local` DOES survive redeploys here: `prod_storage:/app/storage` is mounted
+    # on both rails and sidekiq below. The objection to `local` is that the
+    # volume sits on ONE host with no backup, and moving off it later means
+    # updating `active_storage_blobs.service_name` on every row, whereas an
+    # s3_compatible endpoint swap needs no database change at all.
     #
     # ⚠ THE DEFAULT BELOW IS THE DANGEROUS ONE. Unset, this resolves to
     # `s3_compatible`, and config/storage.yml reads every credential as
@@ -127,14 +117,9 @@ services:
     # correct: migrations are a deliberate step, never a side effect of a
     # restart (see the bring-up note at the bottom).
     #
-    # No `ports:` — **Caddy** reaches this over the `mesh` network by service
-    # name, as `inbox.zasmate.com`. Publishing 3000 on the host would expose
-    # Chatwoot directly and route around the SSO lockdown.
-    #
-    # ⚠ There is no Cloudflare tunnel any more. It existed because "production"
-    # was a workstation behind NAT with no public IP; the VPS has a static one.
-    # See agentic-str `Caddyfile` and its
-    # docs/superpowers/specs/2026-09-10-vps-netlify-deployment-design.md (D5).
+    # No `ports:` — the reverse proxy reaches this over the `mesh` network by
+    # service name. Publishing 3000 on the host would expose Chatwoot directly
+    # and route around the SSO lockdown.
     command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
     volumes:
       - prod_storage:/app/storage
@@ -166,10 +151,9 @@ volumes:
 
 networks:
   internal:
-  # Shared with agentic-str's `docker-compose.production.yaml`, so the platform
-  # API can reach `rails:3000` and Caddy can route to both services. (Only two
-  # now: the vendor dashboard moved to Netlify and is not on this box.)
-  # External so neither stack owns the other's lifetime:
+  # Shared with the platform's own compose stack, so its API can reach
+  # `rails:3000` and the reverse proxy can route to both. External so neither
+  # stack owns the other's lifetime:
   #   docker network create mesh
   mesh:
     external: true

@@ -3,7 +3,7 @@
 # The frontend's `accounts/limits` store action (via `useQuota` and the
 # agentic-AI banner) calls GET /enterprise/api/v1/accounts/:account_id/limits.
 # Upstream serves that path from `enterprise/`, which this fork does not run in
-# production (docs/fork/MIT_ONLY.md). config/initializers/custom_routes.rb
+# production. config/initializers/custom_routes.rb
 # prepends the same path to this controller, so the frontend is unchanged and
 # the route works with or without the enterprise folder present.
 #
@@ -12,7 +12,7 @@
 # unlimited, so the UI skips its counters.
 class Custom::AccountLimitsController < Api::V1::Accounts::BaseController
   # `agents` counts tenant seats only (platform-managed infrastructure is
-  # excluded, ADR-0005), matching the create guard and the scoped agents list.
+  # excluded), matching the create guard and the scoped agents list.
   QUOTA_UI_RESOURCES = (%w[agents inboxes] + Custom::Account::PlanUsageAndLimits::QUOTA_RESOURCES).freeze
 
   def show

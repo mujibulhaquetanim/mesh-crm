@@ -1,6 +1,6 @@
 # Single stack for the whole fork: app services (rails, sidekiq, vite) plus
-# local infra (redis, mailhog). Postgres is external (Neon, via POSTGRES_* in
-# .env). Pinning the project name keeps `docker compose` commands addressing the
+# local infra (redis, mailhog). Postgres is external (a managed database, via
+# POSTGRES_* in .env). Pinning the project name keeps `docker compose` commands addressing the
 # same stack regardless of the directory it is invoked from.
 name: mesh-crm
 
@@ -66,7 +66,7 @@ services:
       # page then 500s with "Vite Ruby can't find entrypoints/v3app.js in the
       # manifests". Point it at the vite service; vite_ruby's DevServerProxy
       # middleware forwards /vite-dev/* there, so the browser only ever talks to
-      # :3000 (which is what makes this work behind the tunnel).
+      # :3000 (which is what makes this work behind a reverse tunnel or proxy).
       VITE_RUBY_HOST: vite
       # The `vite` service owns building (see its `bin/vite build --watch`).
       # Without this, vite_ruby's autoBuild makes RAILS shell out to its own
@@ -77,8 +77,7 @@ services:
       VITE_RUBY_AUTO_BUILD: "false"
       # annotaterb hooks db:migrate in development and re-annotates EVERY model
       # whose schema comment drifts — spilling diffs into OSS/enterprise files the
-      # fork must not touch (see docs/fork/error-log/
-      # 2026-07-10-db-migrate-annotation-spill-into-oss-files.md). The fork keeps
+      # fork must not touch. The fork keeps
       # annotations frozen at upstream's text; after adding a fork migration, run
       # annotaterb manually for just the fork-touched models.
       ANNOTATERB_SKIP_ON_DB_TASKS: "1"
@@ -189,7 +188,7 @@ services:
     #
     # `bin/vite dev` serves the app as ~1600 UNBUNDLED ES modules (every locale x
     # every namespace is its own `?import` request). On one machine that is fine.
-    # Through the Cloudflare tunnel and vite_ruby's Rails asset proxy it is not:
+    # Through a reverse tunnel and vite_ruby's Rails asset proxy it is not:
     # measured individual module fetches of 5s / 14s / 25s, and a first paint
     # around TWO MINUTES. The page is blank the whole time, so it reads as
     # "Chatwoot never opens" rather than "Chatwoot is slow".
@@ -211,7 +210,7 @@ services:
   # Redis
   ##################################################################
   #
-  # Postgres stays external (Neon, via POSTGRES_* in .env), but Redis runs
+  # Postgres stays external (via POSTGRES_* in .env), but Redis runs
   # locally here — REDIS_URL=redis://redis:6379 resolves to this service.
 
   redis:

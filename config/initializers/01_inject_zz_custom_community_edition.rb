@@ -2,7 +2,7 @@
 
 # Fork: let the extension injector run with custom/ but WITHOUT enterprise/.
 #
-# Production is built without the enterprise/ folder (docs/fork/MIT_ONLY.md).
+# Production is built without the enterprise/ folder.
 # Upstream never ships that combination: its community image has neither
 # folder, so `ChatwootApp.extensions` is `[]`. With custom/ present it returns
 # `%w[enterprise custom]` unconditionally, and `each_extension_for` then looks

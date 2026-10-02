@@ -11,8 +11,7 @@ require 'zlib'
 #
 # Since 2026-09-28 the masters are the orange "Z" + sparkle and the orange
 # wordmark on a TRANSPARENT background. What can go wrong now is the opposite of
-# the old JPEG era (when a global `-transparent` punched the white Z out,
-# docs/fork/error-log/2026-09-22-transparent-matches-globally-and-punches-out-the-logo.md):
+# the old JPEG era (when a global `-transparent` punched the white Z out):
 # an icon built from a flattened or JPEG export comes out on an opaque square,
 # or a bad crop leaves a mostly-empty canvas. So the spec counts the two things
 # that separate the real artwork from both: opaque ORANGE pixels, and genuinely

@@ -13,7 +13,7 @@ RSpec.describe Custom::Account do
 
   it 'serves calls exactly when the Call model ships (today: only with enterprise/)' do
     # Not stubbed: true in the development tree, false in the CE tree the
-    # production image is built from (MIT_ONLY.md §Tests runs both).
+    # production image is built from.
     expect(described_class.calls_served?).to eq(ChatwootApp.enterprise?.present?)
   end
 

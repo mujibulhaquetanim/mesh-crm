@@ -6,7 +6,7 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
 
   # The control plane's service identity: an administrator whose account_user is
   # itself platform-managed. Only this identity may set the `platform_managed`
-  # exemption flag (docs/fork/adr/0005).
+  # exemption flag.
   let(:platform_admin) do
     user = create(:user, account: account, role: :administrator)
     account.account_users.find_by(user_id: user.id).update!(platform_managed: true)
@@ -153,7 +153,7 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
     it_behaves_like 'a quota guarded create endpoint'
   end
 
-  describe 'platform-managed creates bypass the controller quota guard (ADR-0005)' do
+  describe 'platform-managed creates bypass the controller quota guard' do
     it 'allows a platform-managed webhook at the cap and persists the flag' do
       account.update!(limits: { webhooks: 1 })
       create(:webhook, account: account)
@@ -194,7 +194,7 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
   # Regression for the platform_managed privilege-escalation loophole: a tenant
   # admin is NOT a platform actor, so a tenant-supplied `platform_managed: true`
   # must be stripped — the flag is ignored and the resource still counts against
-  # the plan (docs/fork/adr/0005).
+  # the plan.
   describe 'tenant admins cannot self-grant the platform-managed exemption' do
     it 'blocks a webhook even when the tenant admin supplies platform_managed: true' do
       account.update!(limits: { webhooks: 1 })

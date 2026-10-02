@@ -46,8 +46,7 @@ Rails.application.config.to_prepare do
   # in after a successful reset, bypassing the MFA-enforcing
   # SuperAdmin::Devise::SessionsController#create entirely. Guarded to the
   # :super_admin scope + SUPER_ADMIN_ENFORCE_MFA — see
-  # custom/app/controllers/custom/devise_overrides/super_admin_passwords_guard.rb
-  # and docs/fork/SUPER_ADMIN.md §4.3.
+  # custom/app/controllers/custom/devise_overrides/super_admin_passwords_guard.rb.
   #
   # Gem-owned, non-reloadable target — the one the guard actually exists for.
   Custom::PrependOnce.call(

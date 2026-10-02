@@ -1,6 +1,6 @@
 # Fork task (net-new file — no upstream overlap, so upstream merges never conflict).
 # Thin shim over the fork-owned Custom::SuperAdminBootstrap service; the logic +
-# tests live in custom/ and spec/custom/. See docs/fork/SUPER_ADMIN.md §4.
+# tests live in custom/ and spec/custom/.
 #
 #   bundle exec rails fork:super_admin:bootstrap
 #
@@ -9,7 +9,7 @@
 #
 # Also: fork:super_admin:mfa_enroll — thin shim over Custom::SuperAdminMfaEnroll,
 # enrolls/rotates MFA for an existing operator (SUPER_ADMIN_MFA_EMAIL). Pairs
-# with the SUPER_ADMIN_ENFORCE_MFA login enforcement. See SUPER_ADMIN.md §4.
+# with the SUPER_ADMIN_ENFORCE_MFA login enforcement.
 # The provisioning URI + backup codes are secrets: the service never logs them
 # (Rails.logger routinely ships to a log aggregator in prod), so printing them
 # — once, to this terminal only — is this task's job, via `puts` below.

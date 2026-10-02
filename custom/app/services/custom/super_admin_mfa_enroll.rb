@@ -1,6 +1,5 @@
 # Headless MFA enrollment for a Super Admin operator, run on the host by
-# whoever holds host access (there is no self-serve UI for this scope — see
-# docs/fork/SUPER_ADMIN.md §4.0). Pairs with the flag-gated enforcement in
+# whoever holds host access (there is no self-serve UI for this scope). Pairs with the flag-gated enforcement in
 # custom/app/controllers/custom/super_admin/devise/sessions_controller.rb
 # (SUPER_ADMIN_ENFORCE_MFA): once an operator is enrolled here, turning that
 # flag on requires their TOTP/backup code on every future login.
@@ -20,8 +19,7 @@
 # rotate — a fresh secret + fresh backup codes.
 #
 # The provisioning URI and backup codes are returned on the Result, never
-# logged (they're the equivalent of a credential — CLAUDE.md §12 "never log
-# access tokens or secret headers"). Only the rake shim prints them, straight
+# logged (they're the equivalent of a credential). Only the rake shim prints them, straight
 # to $stdout via `puts`, bypassing Rails.logger entirely so they never reach
 # a log aggregator. That's the "printed ONCE" contract.
 #

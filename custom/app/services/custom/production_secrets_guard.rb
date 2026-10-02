@@ -5,8 +5,7 @@
 # and integration hook token — but until this guard nothing CALLED it at boot.
 # Start the fork with the keys unset and the container reports healthy, every
 # channel credential is written in the clear, and no error appears anywhere.
-# That already happened once (docs/fork/error-log, and the platform's
-# troubleshooting/119).
+# That has already happened once.
 #
 # It is a boot guard rather than a warning because the damage is not reversible
 # by fixing the config afterwards: `support_unencrypted_data = true`
@@ -47,7 +46,7 @@ module Custom
     # secret_key_finder.rb:24) and Rails raises at application.rb:435 — several
     # phases BEFORE `after_initialize`, where this runs. That case is already
     # fail-closed and loud; it just fails with Rails' error, not ours.
-    # See docs/fork/error-log/2026-09-14-devise-preempts-the-production-secrets-guard.md.
+    #
     PLACEHOLDER_PREFIX = 'replace_with'.freeze
 
     def self.run!(env: ENV, rails_env: Rails.env, encryption_config: ActiveRecord::Encryption.config)

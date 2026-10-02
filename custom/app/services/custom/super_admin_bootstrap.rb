@@ -104,8 +104,7 @@ module Custom
     # what deletes the key (`#finish_onboarding`).
     #
     # The fork changed that premise. `rake fork:super_admin:bootstrap` is the
-    # documented way this instance gets its operator (docs/fork/SUPER_ADMIN.md
-    # §4.1), it runs before `rails server`, and it never touched the key. So the
+    # documented way this instance gets its operator, it runs before `rails server`, and it never touched the key. So the
     # fork's own deploy path produced an instance that already had an operator
     # and STILL served the anonymous wizard — the window upstream closes on
     # first sign-up simply never closed here. Any deploy reachable from the

@@ -41,7 +41,7 @@
 # uniqueness implies per-account uniqueness, so the stronger rule decides. The
 # only visible effect is that a same-account duplicate collects the "has already
 # been taken" message twice. Deleting upstream's validator instead would be a
-# core-flow edit, which this fork does not make (docs/fork/UPSTREAM_DIFF.md §0).
+# core-flow edit, which this fork does not make.
 module Custom::Channel::FacebookPage
   def self.prepended(base)
     base.validates :page_id, uniqueness: true

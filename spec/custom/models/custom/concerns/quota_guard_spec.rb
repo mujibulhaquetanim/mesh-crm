@@ -80,7 +80,7 @@ RSpec.describe Custom::Concerns::QuotaGuard do
     end
   end
 
-  describe 'platform-managed records bypass the guard (ADR-0005)' do
+  describe 'platform-managed records bypass the guard' do
     it 'allows a platform-managed agent bot at the cap' do
       account.update!(limits: { agent_bots: 1 })
       create(:agent_bot, account: account)

@@ -11,8 +11,7 @@
 <%# fires for this scope and calls new_registration_path(resource_name) → %>
 <%# new_super_admin_registration_path, a helper that no longer exists, taking %>
 <%# down GET /super_admin/password/new and /super_admin/password/edit — the %>
-<%# operator's documented password-recovery pages (docs/fork/SUPER_ADMIN.md %>
-<%# §4.0) — with a NoMethodError. %>
+<%# operator's password-recovery pages — with a NoMethodError. %>
 <%# %>
 <%# The fix keys the link off the ROUTE rather than the module, via %>
 <%# Devise::Mapping#used_routes (public API; it is `routes - skip`). That is %>
@@ -22,7 +21,7 @@
 <%# Upstream-pull note: a full copy under custom/app/views never produces a git %>
 <%# conflict, so a change to the gem's partial is silently never picked up. %>
 <%# Re-diff this file against the devise gem's copy when devise is upgraded — %>
-<%# the pinned version above is the diff anchor. See docs/fork/UPSTREAM_DIFF.md §1. %>
+<%# the pinned version above is the diff anchor. %>
 <%- if controller_name != 'sessions' %>
   <%= link_to "Log in", new_session_path(resource_name) %><br />
 <% end %>
@@ -56,7 +55,7 @@
 <%# through `Devise.setup`. So `Devise.omniauth_configs` is EMPTY, Devise %>
 <%# generated no omniauth routes, and `omniauth_authorize_path` does not %>
 <%# exist: NoMethodError, which takes down GET /super_admin/password/{new,edit} %>
-<%# — the operator's documented password-recovery pages (SUPER_ADMIN.md §4.0). %>
+<%# — the operator's password-recovery pages. %>
 <%# %>
 <%# Note this could NOT be keyed off `devise_mapping.used_routes` the way the %>
 <%# registration link above is: `used_routes` DOES include :omniauth_callback %>

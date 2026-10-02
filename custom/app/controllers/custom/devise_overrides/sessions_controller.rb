@@ -1,9 +1,8 @@
 module Custom::DeviseOverrides::SessionsController
   include Custom::Concerns::SsoOnlyLogin
 
-  # SaaS auth is owned by the external Next.js / NestJS stack; users are handed
-  # into Chatwoot only via the Platform SSO login link
-  # (docs/fork/CHATWOOT_ENGINE_INTEGRATION.md §4.5). When ENABLE_SSO_ONLY_LOGIN is
+  # SaaS auth is owned by the external platform; users are handed into
+  # Chatwoot only via the Platform SSO login link. When ENABLE_SSO_ONLY_LOGIN is
   # on, reject every non-SSO session create (password + MFA-token) so native
   # login cannot be used to bypass the external app — the sso_auth_token can only
   # be minted with the PLATFORM_TOKEN, so login stays server-to-server gated.

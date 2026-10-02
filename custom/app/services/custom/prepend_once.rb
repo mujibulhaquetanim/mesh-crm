@@ -27,7 +27,7 @@
 # so nothing here ever fires a second time.
 #
 # Compact class form for the same namespace reason as the sibling
-# `Custom::SuperAdminMfaEnroll` — see docs/fork/UPSTREAM_DIFF.md §2.
+# `Custom::SuperAdminMfaEnroll`.
 class Custom::PrependOnce
   # Returns true when it actually prepended, false when it was already applied.
   def self.call(target, overlay)

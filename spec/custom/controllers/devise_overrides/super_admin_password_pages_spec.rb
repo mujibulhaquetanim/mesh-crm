@@ -11,7 +11,7 @@ require 'rails_helper'
 # omniauth routes, and that helper does not exist → NoMethodError → 500.
 #
 # `custom/app/views/devise/shared/_links.html.erb` intersects the provider list
-# with `Devise.omniauth_configs.keys`. See docs/fork/SUPER_ADMIN.md §4.0.
+# with `Devise.omniauth_configs.keys`.
 #
 # Worth stating plainly: this is a usability + honesty fix, NOT a posture
 # change. POST/PUT /super_admin/password never load this partial and were live

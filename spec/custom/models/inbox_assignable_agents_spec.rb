@@ -4,7 +4,7 @@ require 'rails_helper'
 # assignee of a customer conversation. Assigning one parks the conversation with
 # an identity no human reads.
 #
-# Backlog 13 Problem 1 scoped the agent LIST and the quota count, but assignee
+# The platform-managed exclusion scoped the agent LIST and the quota count, but assignee
 # pickers are built from `account.administrators` — and the provisioned service
 # admin is an administrator — so it kept leaking there.
 RSpec.describe 'Assignable agents exclude platform-managed users' do

@@ -1,8 +1,8 @@
-# Fork-local spec runner (see docs/fork/IMPLEMENTATION_PLAN.md Phase 0).
+# Fork-local spec runner.
 # Note: docker-compose.test.yaml is an upstream production-style deployment
 # file, NOT a test runner — hence this separate file.
 #
-# Specs must never touch the external Neon/Upstash instances from .env, so
+# Specs must never touch the external Postgres/Redis instances from .env, so
 # this file hard-overrides every POSTGRES_*/REDIS_URL value with throwaway
 # local containers (tmpfs-backed, nothing persists).
 #

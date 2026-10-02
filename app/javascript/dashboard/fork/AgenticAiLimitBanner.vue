@@ -1,12 +1,12 @@
 <script setup>
 /**
  * Fork banner: warns admins when the account has reached the agentic-AI
- * (automated workflow) cap enforced by the external NestJS backend.
+ * (automated workflow) cap enforced by the external platform backend.
  *
  * Data rides the existing quota pipeline — the account limits endpoint exposes
- * `agentic_ai: { allowed, consumed }` (see the Custom accounts controller and
- * docs/fork/ENTITLEMENTS.md), so this reuses `useQuota` and adds no coupling to
- * NestJS. Self-contained under dashboard/fork/ and mounted with a single line
+ * `agentic_ai: { allowed, consumed }` (see the Custom accounts controller), so
+ * this reuses `useQuota` and adds no coupling to
+ * that backend. Self-contained under dashboard/fork/ and mounted with a single line
  * in App.vue to keep upstream merges clean.
  */
 import { computed } from 'vue';

@@ -1,4 +1,4 @@
-# Production-MODE mesh-crm against a LOCAL, throwaway database.
+# Production-MODE fork against a LOCAL, throwaway database.
 #
 # The point of this file is to exercise the fork the way production runs it —
 # precompiled assets, no dev reloading, production caching and code paths —
@@ -15,10 +15,9 @@
 # │    `platform_managed` webhook serialization. The exact opposite of        │
 # │    "test every feature".                                                  │
 # │                                                                          │
-# │ 2. `.env` points POSTGRES_HOST at Neon (`ep-twilight-pond-…`), i.e. the   │
-# │    LIVE mesh-crm database. Booting production mode against it would run   │
-# │    migrations on production, from a tree 20 commits and a 57-commit       │
-# │    upstream merge ahead of what is deployed.                              │
+# │ 2. `.env` may point POSTGRES_HOST at the LIVE managed database. Booting   │
+# │    production mode against it would run migrations on production, from a │
+# │    tree that is ahead of what is deployed.                                │
 # └──────────────────────────────────────────────────────────────────────────┘
 #
 # ⚠ `environment:` BEATS `env_file:` in compose. That precedence is the whole
@@ -27,8 +26,8 @@
 # variable that could reach production infrastructure or a real person is
 # overridden below. Do not reorder these into `env_file` or the override is lost.
 #
-# PORTS ARE SHIFTED so this runs BESIDE the agentic-str stack rather than
-# fighting it: that stack already holds 5432 (Postgres) and 6379 (Redis).
+# PORTS ARE SHIFTED so this runs BESIDE other local stacks that already hold
+# 5432 (Postgres) and 6379 (Redis).
 #
 #   Rails     http://localhost:3000
 #   Postgres  localhost:5433
@@ -64,14 +63,14 @@ x-app: &app
   env_file: .env
   environment: &app-env
     # ── Production for real. `.env` says `development`, which is what disarms
-    # the fork's own production guards (same root cause as agentic-str's
-    # troubleshooting/273). Stated explicitly so this run is honestly production.
+    # the fork's own production guards. Stated explicitly so this run is
+    # honestly production.
     RAILS_ENV: production
     NODE_ENV: production
     INSTALLATION_ENV: docker
     RAILS_LOG_TO_STDOUT: "true"
 
-    # ── The database. LOCAL container, never Neon. `POSTGRES_HOST` is the
+    # ── The database. LOCAL container, never the managed one. `POSTGRES_HOST` is the
     # compose service name, so it resolves on the internal network and cannot
     # reach the production host even if `.env` still names it.
     POSTGRES_HOST: postgres
@@ -84,7 +83,7 @@ x-app: &app
     # `DATABASE_URL` takes precedence over the individual params above
     # (`docker/entrypoints/helpers/pg_database_url.rb` relies on that), so one
     # inherited from `.env` would silently win and send a production-mode boot
-    # back at Neon. The first attempt here set it to `""` to neutralise it —
+    # back at the managed database. The first attempt here set it to `""` to neutralise it —
     # which FAILED: Rails treats an empty-but-PRESENT value as a URL config and
     # aborts with "Database URL cannot be empty" rather than falling back.
     #
@@ -93,7 +92,7 @@ x-app: &app
     # `?sslmode=disable` is REQUIRED on the URL, not just in `database.yml`.
     # That file defaults `sslmode` to `disable`, but an explicit `DATABASE_URL`
     # overrides the merge — so without it the connection inherits `require`
-    # (correct for Neon, fatal against a local container that speaks no SSL:
+    # (correct for a managed provider, fatal against a local container that speaks no SSL:
     # "server does not support SSL, but SSL was required").
     DATABASE_URL: postgres://chatwoot:chatwoot@postgres:5432/mesh_crm_prodlocal?sslmode=disable
     POSTGRES_SSLMODE: disable
@@ -107,17 +106,12 @@ x-app: &app
 
     # ── Where the app thinks it lives.
     #
-    # The PUBLIC tunnel hostname, not `localhost:3000`. Meta's OAuth callback is
-    # made by Meta's servers, so a loopback address is unreachable to them and
-    # channel connection cannot complete — the reason this started as localhost
-    # was simply that no tunnel was running yet.
-    #
-    # ⚠ This hostname is the TUNNEL's, and the tunnel points at THIS stack
-    # (`~/.cloudflared/config.yml`: mesh-crm.<domain> -> http://localhost:3000).
-    # It is NOT production: production is the Neon-backed deployment, which this
-    # file deliberately never touches. Same hostname, different backend — so
-    # only ONE of the two may run behind the tunnel at a time.
-    FRONTEND_URL: https://mesh-crm.mujibulhaquetanim.dev
+    # `localhost:3000` by default. To connect a Meta channel, set
+    # PRODLOCAL_FRONTEND_URL in `.env` to a PUBLIC https hostname that routes
+    # to this stack: Meta's OAuth callback is made by Meta's servers, so a
+    # loopback address is unreachable to them and channel connection cannot
+    # complete.
+    FRONTEND_URL: ${PRODLOCAL_FRONTEND_URL:-http://localhost:3000}
 
     # ── Mail NEUTRALISED. A production-mode Chatwoot sends real invitations,
     # password resets and conversation notifications. `.env` carries live SMTP
@@ -138,8 +132,7 @@ x-app: &app
 
 services:
   postgres:
-    # The SAME image the agentic-str stack uses — pgvector, because Chatwoot's
-    # own migrations enable the extension.
+    # pgvector, because Chatwoot's own migrations enable the extension.
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: mesh_crm_prodlocal
@@ -149,8 +142,8 @@ services:
       - "127.0.0.1:5433:5432"
     volumes:
       # Named distinctly so it can NEVER be confused with `mesh-crm_*` (the dev
-      # stack) or `agentic-str_*` (the API stack). `down -v` on this file must
-      # only ever destroy this file's data.
+      # stack) or any other local stack's. `down -v` on this file must only
+      # ever destroy this file's data.
       - prodlocal_postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chatwoot -d mesh_crm_prodlocal"]

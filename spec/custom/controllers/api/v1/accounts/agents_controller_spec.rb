@@ -2,7 +2,7 @@ require 'rails_helper'
 
 # Fork override: the tenant-facing agents endpoint excludes platform-managed
 # infrastructure users (the control plane's automation service admin + AI reply
-# identity, ADR-0005/0006). See
+# identity). See
 # custom/app/controllers/custom/api/v1/accounts/agents_controller.rb.
 RSpec.describe 'Agents API (fork platform-managed exclusion)', type: :request do
   let(:account) { create(:account) }

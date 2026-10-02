@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Paid features upstream moved into the MIT core: find them, so we switch them on.
 
-The owner's rule (2026-09-28, docs/fork/README.md ground rule 9): before every
-rebuild, sync with upstream Chatwoot, and when a feature that used to be
-enterprise-only is now in the community core, make it available. Production
-ships the MIT core only (MIT_ONLY.md), so a feature upstream frees is ours to
-use the day the sync lands, but nothing turns it on by itself. Companies moved
-on 2026-09-24 and stayed off for every account (UPSTREAM_SYNC.md §3h).
+The rebuild rule (2026-09-28): before every rebuild, sync with upstream
+Chatwoot, and when a feature that used to be enterprise-only is now in the
+community core, make it available. Production ships the MIT core only, so a
+feature upstream frees is ours to use the day the sync lands, but nothing turns
+it on by itself. Companies moved on 2026-09-24 and stayed off for every account
+until this check existed.
 
     python3 scripts/fork-policy/core-moves.py                 # review: moves since the marker
     python3 scripts/fork-policy/core-moves.py --since <sha>   # audit any range
@@ -17,7 +17,7 @@ A move is either signal, between the reviewed upstream commit (the marker file)
 and the upstream commit merged into <ref>:
   flag   a config/features.yml entry that lost `premium: true`;
   code   files git sees RENAMED out of enterprise/ into the core.
-Then UPSTREAM_SYNC.md §5c says what "make it available" means.
+Then the upstream-sync runbook says what "make it available" means.
 
 --require-synced also fails when <ref> does not contain upstream/develop: the
 build must carry upstream's latest. Set ALLOW_UNSYNCED_BUILD="<reason>" only for
@@ -89,7 +89,7 @@ def main():
         behind = int(git('rev-list', '--count', f'{target}..upstream/develop').stdout)
         if behind:
             reason = os.environ.get('ALLOW_UNSYNCED_BUILD', '').strip()
-            msg = f'{args.ref} is {behind} upstream commit(s) behind upstream/develop: sync first (UPSTREAM_SYNC.md §6)'
+            msg = f'{args.ref} is {behind} upstream commit(s) behind upstream/develop: sync first'
             if reason:
                 print(f'  warn  {msg} — OVERRIDDEN: {reason}')
             else:
@@ -114,7 +114,7 @@ def main():
         (ROOT / MARKER).write_text(f'{target}\n')
         print(f'\n  marked upstream {target[:10]} as reviewed in {MARKER} — commit it with the change that acts on it')
     elif not reviewed:
-        fails.append('unreviewed moves above: make each one available (UPSTREAM_SYNC.md §5c), '
+        fails.append('unreviewed moves above: make each one available, '
                      'then run with --mark and commit the marker')
 
     print()

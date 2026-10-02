@@ -2,7 +2,7 @@ require 'rails_helper'
 
 # Verifies the fork's flag-gated MFA enforcement on the highest-blast-radius
 # login in the fleet (custom/app/controllers/custom/super_admin/devise/sessions_controller.rb).
-# See docs/fork/SUPER_ADMIN.md §3 ("MFA enforced on login") + §4 (runbook).
+#
 RSpec.describe 'Super Admin MFA enforcement', type: :request do
   before do
     skip('Skipping since MFA is not configured in this environment') unless Chatwoot.encryption_configured?

@@ -2,8 +2,8 @@ require 'rails_helper'
 
 # A campaign is the second automated customer-facing outbound path on an
 # account: `one_off` bulk-sends on a WhatsApp/SMS inbox, `ongoing` fires at
-# website visitors. Neither goes through the platform agent, so on a meta-saas
-# account both contradict ADR-0006's reply authority — and, just as concretely,
+# website visitors. Neither goes through the platform agent, so on a
+# platform-run account both contradict its reply authority — and, just as concretely,
 # they deliver through Chatwoot directly, so their messages never reach the
 # platform's usage metering or audit trail.
 #

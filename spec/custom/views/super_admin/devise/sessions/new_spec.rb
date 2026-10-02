@@ -9,7 +9,7 @@ require 'rails_helper'
 # operator locked out with no other failing test to catch it.
 #
 # GET /super_admin/sign_in 500s in this test environment (pre-existing,
-# unrelated Vite/asset-manifest issue — see docs/fork/error-log and the
+# unrelated Vite/asset-manifest issue — see the
 # "renders the login page" failure already excluded elsewhere). So this
 # asserts at the template-render level instead of the request level, and
 # stubs the vite_* helpers purely to isolate this template from that

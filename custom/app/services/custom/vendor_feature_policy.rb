@@ -3,8 +3,8 @@
 #
 # Vendors are account ADMINISTRATORS (the platform provisions them that way so
 # Chatwoot is their full workspace), so upstream's policies let them do
-# everything below. The platform is the only reply authority on an account
-# (ADR-0006): our agent answers, and a human takes over through handoff.
+# everything below. The platform is the only reply authority on an account:
+# its agent answers, and a human takes over through handoff.
 #
 # - **Agent bots.** An inbox with an agent bot parks every new conversation as
 #   `pending` and hands it to that bot: a second reply path beside ours, and
@@ -20,7 +20,7 @@
 # Two layers enforce this, and this module is the one list both read:
 #
 # 1. **Hidden** — the platform sends the account feature flag `agent_bots:
-#    false` (agentic-str `chatwoot-features.ts`), which removes Settings → Bots
+#    false`, which removes Settings → Bots
 #    and the inbox "Bot configuration" tab. `Custom::Integrations::App` removes
 #    the blocked apps from the integrations list.
 # 2. **Refused** — the controller overlays return 403 to every identity that is
@@ -31,7 +31,8 @@
 # `platform_managed` flag (see Custom::Concerns::PlatformActor), never a request
 # parameter.
 #
-# Adding a feature to this list: docs/fork/VENDOR_FEATURE_POLICY.md. The
+# Adding a feature to this list also means a spec in
+# spec/custom/controllers/api/v1/accounts/vendor_feature_policy_spec.rb. The
 # pre-rebuild check (scripts/fork-policy/check.py) fails if this file or one of
 # its overlays goes missing.
 module Custom::VendorFeaturePolicy

@@ -1,7 +1,7 @@
 require 'rails_helper'
 
 # Fork: first-boot Super Admin provisioning + baseline hardening.
-# See custom/app/services/custom/super_admin_bootstrap.rb + docs/fork/SUPER_ADMIN.md.
+# See custom/app/services/custom/super_admin_bootstrap.rb.
 RSpec.describe Custom::SuperAdminBootstrap do
   let(:logger) { Logger.new(nil) }
 

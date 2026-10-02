@@ -45,13 +45,13 @@ module Chatwoot
     # rubocop:disable Rails/FilePath
     config.eager_load_paths += Dir["#{Rails.root}/enterprise/app/**"]
     # Fork overlay: mirror the enterprise wiring for the custom/ extension
-    # folder consumed by prepend_mod_with (see docs/fork/ARCHITECTURE.md)
+    # folder consumed by prepend_mod_with
     config.eager_load_paths += Dir["#{Rails.root}/custom/app/**"]
     # rubocop:enable Rails/FilePath
     # Add enterprise views to the view paths
     config.paths['app/views'].unshift('enterprise/app/views')
     # Fork overlay: custom views take precedence over enterprise/OSS (used for
-    # white-label mailer template overrides — see docs/fork/WHITE_LABEL.md)
+    # white-label mailer template overrides)
     config.paths['app/views'].unshift('custom/app/views')
 
     # Load enterprise initializers alongside standard initializers

@@ -2,9 +2,8 @@ module Custom::Account::PlanUsageAndLimits
   QUOTA_RESOURCES = %w[teams webhooks agent_bots labels custom_attribute_definitions automation_rules integrations].freeze
 
   # Limit keys stored in accounts.limits but NOT enforced by Chatwoot: the
-  # agentic-AI (automated-workflow) cap is enforced by the external NestJS
-  # backend and only displayed in the dashboard (docs/fork/ENTITLEMENTS.md,
-  # CHATWOOT_ENGINE_INTEGRATION.md §5). They must pass schema validation so the
+  # agentic-AI (automated-workflow) cap is enforced by the external platform
+  # backend and only displayed in the dashboard. They must pass schema validation so the
   # control plane can write them via the Platform API, but they get no
   # EntitlementService counter/guard.
   EXTERNAL_LIMIT_KEYS = %w[agentic_ai].freeze
@@ -19,7 +18,7 @@ module Custom::Account::PlanUsageAndLimits
   # `agents` and `inboxes` also read the account's own limits first. The MIT
   # core's `usage_limits` returns the installation maximum for both, and until
   # 2026-09-27 enterprise's override was what applied the per-account cap. In
-  # production, which runs without enterprise/ (docs/fork/MIT_ONLY.md), without
+  # production, which runs without enterprise/, without
   # this the seat cap the platform projects would be ignored by the core's own
   # guards. With enterprise present, `super` still supplies the fallback.
   def usage_limits

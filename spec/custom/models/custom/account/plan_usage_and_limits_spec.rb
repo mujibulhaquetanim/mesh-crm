@@ -18,7 +18,7 @@ RSpec.describe Custom::Account::PlanUsageAndLimits do
 
     # The core's own seat guards (AgentBuilder#can_add_agent?, the bulk-invite
     # count) read these. Without enterprise/, only this override applies the
-    # per-account cap (docs/fork/MIT_ONLY.md).
+    # per-account cap.
     it 'resolves agents and inboxes from the limits column' do
       account.update!(limits: { agents: 3, inboxes: 4 })
 
@@ -65,7 +65,7 @@ RSpec.describe Custom::Account::PlanUsageAndLimits do
 
     it 'accepts every key the enterprise schema accepts (upstream-sync tripwire)' do
       # Runs wherever enterprise/ is present (development, the sync checks).
-      # The production build strips it (docs/fork/MIT_ONLY.md), and there is no
+      # The production build strips it, and there is no
       # enterprise schema to compare against.
       skip 'enterprise/ is not present in this tree' unless defined?(Enterprise::Account::PlanUsageAndLimits)
 
