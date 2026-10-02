@@ -9,7 +9,7 @@
 # edited. Spec: spec/custom/initializers/facebook_messenger_verify_token_spec.rb.
 #
 # Compact module form for the same namespace reason as the sibling
-# `Custom::PrependOnce` — see docs/fork/UPSTREAM_DIFF.md §2.
+# `Custom::PrependOnce`.
 module Custom::FacebookMessengerVerifyToken
   def valid_verify_token?(verify_token)
     expected = GlobalConfigService.load('FB_VERIFY_TOKEN', '').to_s

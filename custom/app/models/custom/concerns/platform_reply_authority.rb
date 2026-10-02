@@ -1,4 +1,4 @@
-# Is this account one the control plane runs — i.e. one where meta-saas's AI
+# Is this account one the control plane runs — i.e. one where the platform's AI
 # agent is the only thing that may put a message in front of a customer?
 #
 # Shared by the two model overlays that enforce that rule (`Custom::AutomationRule`
@@ -10,8 +10,7 @@
 # **How the account is detected, and why by this signal.** Through
 # `accounts.limits`, which only a platform plan sync ever writes — specifically
 # `agent_bots: 0`, the control plane's own machine-readable statement that
-# nothing but its agent replies here (agentic-str `chatwoot-limits.ts` projects
-# it from `plan.maxAgentBots`, which every plan sets to 0). A stock Chatwoot
+# nothing but its agent replies here (every plan projects it as 0). A stock Chatwoot
 # account has no `limits` at all, so it is untouched and keeps behaving exactly
 # as upstream intends.
 #

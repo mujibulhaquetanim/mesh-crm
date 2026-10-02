@@ -2,8 +2,7 @@ require 'rails_helper'
 
 # Custom::VendorFeaturePolicy: agent bots and AI integrations are platform-owned,
 # so a vendor (an account administrator that is not platform-managed) can
-# neither see nor use them, while the platform's service identity can. See
-# docs/fork/VENDOR_FEATURE_POLICY.md.
+# neither see nor use them, while the platform's service identity can.
 RSpec.describe 'Vendor feature policy', type: :request do
   let(:account) { create(:account) }
   let(:vendor) { create(:user, account: account, role: :administrator) }

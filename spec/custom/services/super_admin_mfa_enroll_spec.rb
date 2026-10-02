@@ -1,9 +1,8 @@
 require 'rails_helper'
 
 # Fork: enrolls/rotates MFA for a Super Admin operator (headless, host-run).
-# See custom/app/services/custom/super_admin_mfa_enroll.rb, the thin rake shim
-# lib/tasks/fork/super_admin.rake (fork:super_admin:mfa_enroll), and
-# docs/fork/SUPER_ADMIN.md §4.
+# See custom/app/services/custom/super_admin_mfa_enroll.rb and the thin rake shim
+# lib/tasks/fork/super_admin.rake (fork:super_admin:mfa_enroll).
 RSpec.describe Custom::SuperAdminMfaEnroll do
   before do
     skip('Skipping since MFA is not configured in this environment') unless Chatwoot.encryption_configured?

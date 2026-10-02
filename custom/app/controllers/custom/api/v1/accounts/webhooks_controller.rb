@@ -45,8 +45,8 @@ module Custom::Api::V1::Accounts::WebhooksController
   # was still non-null, the self-heal returned early on every subsequent
   # `ensureAccount`, and the webhook was never re-created: Chatwoot silently
   # stopped delivering and that tenant's AI went dark permanently, with no error
-  # on either side. Same incident class as backlog 13, where deleting the
-  # platform-managed service admin destroyed the account's stored credential.
+  # on either side. Same incident class as deleting the platform-managed
+  # service admin, which destroyed the account's stored credential.
   #
   # Raised as `RecordNotFound` (→ 404 via `request_exception_handler`) rather
   # than a 403: a tenant has no legitimate need to learn that a webhook they may
@@ -63,7 +63,7 @@ module Custom::Api::V1::Accounts::WebhooksController
     # from tenant entitlements (never counted, never blocked). The exemption is
     # granted ONLY when the acting identity is itself platform-managed (the control
     # plane's service user), never on a tenant-supplied flag, so a tenant admin
-    # cannot self-exempt. See docs/fork/adr/0005.
+    # cannot self-exempt.
     return if platform_managed_webhook?
 
     check_quota(:webhooks)

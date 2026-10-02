@@ -17,8 +17,7 @@
 # That `sign_in` call never passes through our MFA-enforcing
 # `SuperAdmin::Devise::SessionsController#create` override at all, so with
 # SUPER_ADMIN_ENFORCE_MFA on, a plain password reset — no OTP anywhere in
-# the flow — could still mint a full super_admin session. See
-# docs/fork/SUPER_ADMIN.md §4.3.
+# the flow — could still mint a full super_admin session.
 #
 # Fix (fail-closed, smallest shape): when the flag is on for this scope, the
 # password reset itself still completes normally (host access / "reset your

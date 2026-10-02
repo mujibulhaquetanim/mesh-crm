@@ -2,8 +2,7 @@ require 'rails_helper'
 
 # Companion to the `super_admin_login/*` throttles: /super_admin/sign_in was
 # rate-limited, /super_admin/password was not, which left the operator scope's
-# second login-shaped path (stock Devise::PasswordsController — see
-# docs/fork/SUPER_ADMIN.md §4.3) open to unlimited reset-mail floods at a
+# second login-shaped path (stock Devise::PasswordsController) open to unlimited reset-mail floods at a
 # guessed operator address and unlimited `reset_password_token` guesses.
 #
 # Rack::Attack is disabled outside production by the last line of

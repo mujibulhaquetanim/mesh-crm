@@ -37,7 +37,6 @@ cat > "$HOOK" <<'EOF'
 #!/bin/sh
 # fork-policy-check — installed by scripts/fork-policy/install-pre-push-hook.sh
 # Refuses a push that breaks the brand or the vendor feature policy.
-# See docs/fork/VENDOR_FEATURE_POLICY.md.
 root="$(git rev-parse --show-toplevel)"
 python3 "$root/scripts/fork-policy/check.py" --tree "$root" || {
   echo "push refused by the fork policy check (see FAIL lines above)" >&2

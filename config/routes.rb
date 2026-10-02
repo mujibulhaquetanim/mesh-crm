@@ -749,7 +749,7 @@ Rails.application.routes.draw do
   # PATCH/PUT /super_admin and DELETE /super_admin (authenticated — that last
   # one deletes the signed-in operator's own account). Nothing links to any of
   # them; operators come from `fork:super_admin:bootstrap` or the console, never
-  # from self-signup (docs/fork/SUPER_ADMIN.md §4.1–§4.2).
+  # from self-signup.
   #
   # Creating an operator through it was already refused — Devise permits only
   # email/password in `sign_up_params` and `name` is validated present on User —

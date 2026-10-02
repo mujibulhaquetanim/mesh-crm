@@ -1,7 +1,7 @@
 # Merge-patch semantics for `custom_attributes` on the Platform API account
 # update. Upstream assigns the param wholesale, so a sparse write like the
 # control plane's periodic agentic-usage writeback
-# (`custom_attributes: { agentic_ai_usage: N }` — docs/fork/ENTITLEMENTS.md)
+# (`custom_attributes: { agentic_ai_usage: N }`)
 # would REPLACE the whole jsonb and wipe Chatwoot-internal account state:
 # `marked_for_deletion_at`/`_reason` (scheduled deletion), `plan_name`,
 # `billing_currency`, onboarding attributes.

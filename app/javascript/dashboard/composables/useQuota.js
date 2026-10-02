@@ -4,7 +4,7 @@ import { useStore } from 'dashboard/composables/store';
 import { useAccount } from 'dashboard/composables/useAccount';
 
 /**
- * Mirrors the backend quota enforcement (docs/fork/ENTITLEMENTS.md) in the UI.
+ * Mirrors the backend quota enforcement in the UI.
  * Reads `{ allowed, consumed }` per resource from the account limits endpoint;
  * `allowed: null` means unlimited. The backend stays the source of truth —
  * this only disables create actions and explains why.

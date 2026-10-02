@@ -1,7 +1,7 @@
 # Scopes the tenant-facing agents endpoint to real, billable seats by excluding
 # platform-managed `account_users` — the control plane's own infrastructure users
-# (the automation service admin behind USER_TOKEN and the AI reply identity,
-# ADR-0005/0006). Those carry `platform_managed: true` and must never surface in a
+# (the automation service admin behind USER_TOKEN and the AI reply identity).
+# Those carry `platform_managed: true` and must never surface in a
 # vendor's Agents settings, count against their `agents` plan slot, or be
 # editable/deletable by the tenant (deleting the service admin would destroy the
 # account's stored API credential).

@@ -1,7 +1,7 @@
 require 'rails_helper'
 
-# The control plane's agent is the only reply authority on a meta-saas account
-# (agentic-str ADR-0006). Captain is force-disabled and `agent_bots` is capped
+# The control plane's agent is the only reply authority on a platform-run
+# account. Captain is force-disabled and `agent_bots` is capped
 # at 0 for that reason, but `automation_rules` is deliberately left non-zero —
 # routing actions are useful and harmless. `send_message` / `send_attachment`
 # are not: both build an outgoing, non-private message on the same

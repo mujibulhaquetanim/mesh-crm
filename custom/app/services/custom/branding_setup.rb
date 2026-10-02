@@ -1,5 +1,4 @@
-# Installation-wide white-label branding for the fork (docs/fork/WHITE_LABEL.md,
-# Layer 1). Upserts the branding InstallationConfig rows — which drive
+# Installation-wide white-label branding for the fork. Upserts the branding InstallationConfig rows — which drive
 # globalConfig.installationName in the dashboard, "Powered by" email/widget
 # links, logos, and legal links — from ENV so a SaaS deploy can rebrand
 # repeatably without Super Admin clicks.

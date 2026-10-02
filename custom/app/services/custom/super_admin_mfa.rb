@@ -15,7 +15,7 @@
 # `ActiveModel::Type::Boolean.new.cast(ENV.fetch('SUPER_ADMIN_ENFORCE_MFA', nil))`
 # expression, so "keep the three identical" was a convention rather than
 # something the code enforced. This is that expression, unchanged, in one
-# place. See docs/fork/SUPER_ADMIN.md §4.3.
+# place.
 #
 # Deliberately re-reads ENV on every call (no memoization): the specs flip the
 # flag per-example with ClimateControl (`with_modified_env`), and a cached
@@ -29,7 +29,7 @@
 #
 # Compact class form (`class Custom::SuperAdminMfa`, not `module Custom; class
 # ...`) for the same reason `super_admin_mfa_enroll.rb` uses it — it keeps
-# `Custom` out of `Module.nesting`. See UPSTREAM_DIFF.md §2's namespace note.
+# `Custom` out of `Module.nesting`.
 class Custom::SuperAdminMfa
   # Same truthiness idiom as the sibling bootstrap flags
   # (`Custom::SuperAdminBootstrap#truthy?`): "true"/"1"/"t"/"on" are on;

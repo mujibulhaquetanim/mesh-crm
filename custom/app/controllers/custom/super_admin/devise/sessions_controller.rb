@@ -1,8 +1,8 @@
 # The `/super_admin` console is the highest-blast-radius login in the fleet — a
 # session here can read/change every tenant's data and mint the
-# `PLATFORM_TOKEN` (docs/fork/SUPER_ADMIN.md §1). Upstream's `valid_credentials?`
+# `PLATFORM_TOKEN`. Upstream's `valid_credentials?`
 # checks `valid_password?` only; the `otp_*` columns on `users` exist but were
-# never consulted on this path (SUPER_ADMIN.md §3 / §5 item 7).
+# never consulted on this path.
 #
 # Behind SUPER_ADMIN_ENFORCE_MFA — read through Custom::SuperAdminMfa.enforced?,
 # the single reader shared with the password-reset guard and the sign-in form
@@ -17,7 +17,7 @@
 #   - Un-enrolled operator: fail CLOSED. Password alone must never mint a
 #     `super_admin` session while the flag is on — refused with an actionable
 #     message naming the enrollment task (`fork:super_admin:mfa_enroll`).
-#     Recovery is host access, per SUPER_ADMIN.md's documented recovery story.
+#     Recovery is host access.
 #   - Wrong/missing OTP renders the exact same generic message as a bad
 #     password, so the response never reveals whether an email has MFA
 #     enrolled. The enrollment-required message is the one deliberate
@@ -67,7 +67,7 @@ module Custom::SuperAdmin::Devise::SessionsController
   def refuse_unenrolled!
     @error_message =
       'MFA enrollment required for this account. Ask an operator with host access to run ' \
-      '`bundle exec rails fork:super_admin:mfa_enroll` (see docs/fork/SUPER_ADMIN.md §4).'
+      '`bundle exec rails fork:super_admin:mfa_enroll`.'
     false
   end
 

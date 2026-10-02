@@ -3,7 +3,7 @@ require 'rails_helper'
 # custom/app/controllers/custom/account_limits_controller.rb, routed by
 # config/initializers/custom_routes.rb. The path is the one the dashboard's
 # quota UI already calls; the fork serves it on the MIT core, with or without an
-# enterprise folder present (docs/fork/MIT_ONLY.md).
+# enterprise folder present.
 RSpec.describe 'Account limits (fork quota endpoint)', type: :request do
   let(:account) { create(:account) }
   let(:admin) { create(:user, account: account, role: :administrator) }

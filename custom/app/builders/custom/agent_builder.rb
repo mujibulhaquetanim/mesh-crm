@@ -4,7 +4,7 @@
 # Upstream's `can_add_agent?` compares the plan limit against
 # `account.account_users.count` — every row, including platform-managed
 # infrastructure seats (the control plane's automation service admin behind
-# USER_TOKEN and the AI reply identity, ADR-0005/0006). Those seats carry
+# USER_TOKEN and the AI reply identity). Those seats carry
 # `platform_managed: true` and must never consume a tenant's `agents` slot —
 # see `Custom::EntitlementService::RESOURCE_COUNTERS[:agents]`
 # (custom/app/services/custom/entitlement_service.rb), which already counts

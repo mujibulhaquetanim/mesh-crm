@@ -8,7 +8,7 @@ require 'rails_helper'
 # that acquired `type: 'SuperAdmin'` would hold cross-tenant control of every
 # account on the installation, reachable with nothing but a leaked vendor
 # password. Nothing in the schema prevents it; only the provisioning paths do.
-# docs/fork/SUPER_ADMIN.md states this invariant three times but never asserted it.
+# The fork's operator docs state this invariant, but nothing asserted it.
 #
 # This spec exists to fail loudly if a future provisioning change, a permitted-param
 # widening, or a seed makes the two populations overlap.

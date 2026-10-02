@@ -1,6 +1,6 @@
 # Model-level quota enforcement: the safety net that covers every create path
 # (channel onboarding, OAuth callbacks, platform APIs), not just the primary
-# API controllers. See docs/fork/ENTITLEMENTS.md.
+# API controllers.
 module Custom::Concerns::QuotaGuard
   extend ActiveSupport::Concern
 
@@ -13,7 +13,7 @@ module Custom::Concerns::QuotaGuard
   def ensure_quota_capacity
     return if account.blank?
     # Platform-managed infrastructure is exempt: never counted, never blocked
-    # by the tenant's plan (docs/fork/adr/0002).
+    # by the tenant's plan.
     return if respond_to?(:platform_managed?) && platform_managed?
 
     resource = Custom::EntitlementService::MODEL_RESOURCES.fetch(self.class.name)

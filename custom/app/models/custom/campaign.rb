@@ -7,8 +7,8 @@
 # fires at visitors matching `trigger_rules`. Neither passes through the
 # platform agent, and both put text in front of a customer.
 #
-# On a meta-saas account that is the exact thing ADR-0006 reserves: the control
-# plane's agent is the only reply authority. Blocking `send_message` on
+# On a platform-run account that is exactly what the control plane reserves:
+# its agent is the only reply authority. Blocking `send_message` on
 # automations (see Custom::AutomationRule) while leaving campaigns open would
 # close the door and leave the window — a vendor who wanted a second outbound
 # path would simply build it here instead, and the automation guard would read
@@ -16,7 +16,7 @@
 #
 # There is a second, independent reason, and it is the one that bites in
 # production: a campaign delivers through Chatwoot directly, so its messages
-# never reach our usage metering or audit trail (agentic-str CLAUDE.md §11, §12).
+# never reach the platform's usage metering or audit trail.
 # Every message the platform is accountable for is supposed to be counted and
 # replayable. Campaign traffic would be neither — invisible spend on a channel
 # the tenant is billed for, and a customer-visible action with no audit row.

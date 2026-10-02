@@ -10,8 +10,7 @@ require 'rails_helper'
 #
 # custom/app/controllers/custom/devise_overrides/super_admin_passwords_guard.rb
 # closes this (wired via config/initializers/custom_prepends.rb, since
-# Devise::PasswordsController ships no prepend_mod_with hook of its own). See
-# docs/fork/SUPER_ADMIN.md §4.3 and §4.0.
+# Devise::PasswordsController ships no prepend_mod_with hook of its own).
 RSpec.describe 'Super Admin password-reset MFA guard', type: :request do
   let(:super_admin) { create(:super_admin, password: 'Password1!') }
 

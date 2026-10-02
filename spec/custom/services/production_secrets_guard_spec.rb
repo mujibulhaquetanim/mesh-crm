@@ -7,8 +7,7 @@ require 'rails_helper'
 # and integration hook token — but nothing ever CALLED it at boot. Start the
 # fork with the keys unset and the container reports healthy, every channel
 # credential is written in the clear, and no error appears anywhere. That
-# already happened once: ../agentic-str/docs/troubleshooting/chatwoot-integration/
-# 119-chatwoot-plaintext-channel-tokens-encryption-unconfigured.md.
+# already happened once.
 #
 # It is not self-healing, which is why this is a boot guard and not a warning:
 # `support_unencrypted_data = true` (application.rb:86) keeps rows written

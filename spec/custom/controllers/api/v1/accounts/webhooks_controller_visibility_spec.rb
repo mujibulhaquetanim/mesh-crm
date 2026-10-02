@@ -83,9 +83,9 @@ RSpec.describe 'Webhooks API (fork platform-managed visibility)', type: :request
     end
 
     # `_webhook.json.jbuilder` now serializes `platform_managed`
-    # (CHATWOOT_ENGINE_INTEGRATION.md §12, 2026-08-17 amendment). The tenant
+    # (2026-08-17). The tenant
     # listing is already scoped to `platform_managed: false` rows only
-    # (§12.1, above), so a tenant only ever sees `false` — this spec pins
+    # (above), so a tenant only ever sees `false` — this spec pins
     # that the value is present at all, not just that the row is hidden.
     it 'tells the tenant their own webhook is not platform-managed' do
       get "/api/v1/accounts/#{account.id}/webhooks",

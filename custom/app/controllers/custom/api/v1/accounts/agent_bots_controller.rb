@@ -21,7 +21,7 @@ module Custom::Api::V1::Accounts::AgentBotsController
     # tenant entitlements (never counted, never blocked). The exemption is granted
     # ONLY when the acting identity is itself platform-managed (the control plane's
     # service user), never on a tenant-supplied flag, so a tenant admin cannot
-    # self-exempt. See docs/fork/adr/0005.
+    # self-exempt.
     return if platform_managed_agent_bot?
 
     check_quota(:agent_bots)

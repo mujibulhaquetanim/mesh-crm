@@ -3,27 +3,27 @@
 
     python3 scripts/fork-policy/check.py                  # the checkout this script is in
     python3 scripts/fork-policy/check.py --tree DIR       # another checkout (the fresh build clone)
-    python3 scripts/fork-policy/check.py --live https://inbox.zasmate.com   # the running inbox
+    python3 scripts/fork-policy/check.py --live https://inbox.example.com   # the running inbox
 
 TREE mode reads source files only (no Ruby, no Docker) and fails when:
   brand.*   a vendor-visible English string, the PWA manifest, the logo artwork
             or the page-title template says "Chatwoot" instead of the brand;
   mit.*     production is MIT-only: the fork quota endpoint and its route, the
             build's enterprise/ strip and image check, and no fork Ruby that
-            references enterprise/ (docs/fork/MIT_ONLY.md);
+            references enterprise/;
   policy.*  a piece of the vendor feature policy is missing: the policy list,
             an overlay, its registration, or the upstream extension point the
             overlay hangs on (an upstream sync can drop one and the overlay
             then silently stops loading);
   repo.*    a conflict marker is committed.
 It WARNS when upstream adds an integration app this policy has not classified,
-because a new app can be a new AI reply path (docs/fork/VENDOR_FEATURE_POLICY.md).
+because a new app can be a new AI reply path.
 
 LIVE mode fetches the running inbox and fails when the page title, the
 branding rows (INSTALLATION_NAME, BRAND_NAME, the brand/legal URLs), the
 manifest or the served logos still say Chatwoot, or when IS_ENTERPRISE is on.
 Those rows live in the database, so only LIVE mode can see them; a rebuild
-does not change them (docs/fork/REBRAND_PRODUCTION.md).
+does not change them.
 
 Prints check ids and verdicts, never secrets. Exit 1 on any FAIL.
 READ THE RESULT LINE, not just the exit code.
@@ -87,7 +87,7 @@ POLICY_REQUIREMENTS = [
     ('policy.voice_flag_served', 'custom/app/models/custom/account.rb',
      r'def feature_channel_voice\?\s*\n\s*Custom::Account\.calls_served\? && super',
      'channel_voice would switch on call buttons and tabs a build without the Call model cannot serve'),
-    # MIT-only production (docs/fork/MIT_ONLY.md): the quota endpoint is fork
+    # MIT-only production: the quota endpoint is fork
     # code on the MIT core, and the build strips enterprise/.
     ('mit.limits_controller', 'custom/app/controllers/custom/account_limits_controller.rb',
      r'class Custom::AccountLimitsController < Api::V1::Accounts::BaseController',
@@ -98,7 +98,7 @@ POLICY_REQUIREMENTS = [
      r'rm -rf "\$WORK/enterprise"', 'the build no longer strips enterprise/ — licensed code would ship'),
     ('mit.build_verifies_image', 'scripts/build-ce-image.sh',
      r'/app/enterprise', 'the build no longer proves the image has no enterprise/'),
-    # The owner's rebuild rule (README ground rule 9): synced with upstream, and
+    # The rebuild rule: synced with upstream, and
     # every paid feature upstream freed into the core made available.
     ('mit.build_gates_core_moves', 'scripts/build-ce-image.sh',
      r'core-moves\.py" --ref "\$SHA" --require-synced',
@@ -213,7 +213,7 @@ def check_tree(root, brand, report):
 
     # mit.no_enterprise_dependency — fork Ruby must not reach into enterprise/:
     # production has no such folder, so a reference is a boot or runtime error
-    # there (docs/fork/MIT_ONLY.md). Comments are ignored.
+    # there. Comments are ignored.
     offenders = []
     for path in sorted((root / 'custom').rglob('*.rb')):
         for n, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
@@ -232,7 +232,7 @@ def check_tree(root, brand, report):
                         'then add it to BLOCKED (policy + checker) or ALLOWED (checker)')
 
     # mit.enterprise_untouched — the fork never edits enterprise/: it doesn't
-    # ship (MIT_ONLY.md), and an edit there is either dead or a licence problem.
+    # ship, and an edit there is either dead or a licence problem.
     # Compared from the last merge-base with upstream to the WORKING TREE, so
     # upstream's own newer changes don't count and uncommitted edits do. Needs
     # the `upstream` remote fetched.
@@ -286,7 +286,7 @@ def check_live(base, brand, report):
     if config:
         for key in ('INSTALLATION_NAME', 'BRAND_NAME'):
             report.check(f'live.{key}', config.get(key) == brand,
-                         f'{key} row is {config.get(key)!r}, not {brand!r} (database row: see REBRAND_PRODUCTION.md)')
+                         f'{key} row is {config.get(key)!r}, not {brand!r} (a database row, not code)')
         for key in ('BRAND_URL', 'WIDGET_BRAND_URL', 'TERMS_URL', 'PRIVACY_URL'):
             value = config.get(key) or ''
             report.check(f'live.{key}', 'chatwoot' not in value.lower(), f'{key} row still points at {value!r}')

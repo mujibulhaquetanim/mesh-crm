@@ -1,7 +1,6 @@
 require 'rails_helper'
 
-# Locks the upstream contracts the external AI orchestrator depends on
-# (docs/fork/AI_REPLY_LOOP.md). If any of these fail after an upstream merge,
+# Locks the upstream contracts the external AI orchestrator depends on. If any of these fail after an upstream merge,
 # the AI loop breaks even though nothing in custom/ changed.
 RSpec.describe 'AI reply loop contract', type: :request do
   let(:account) { create(:account) }

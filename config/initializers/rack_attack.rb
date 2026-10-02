@@ -182,7 +182,7 @@ class Rack::Attack
   #
   # Same shape as the `reset_password/*` pair below for the tenant scope
   # (/auth/password), pointed at the operator scope's path and matching its
-  # limits. See docs/fork/SUPER_ADMIN.md §3 / §4.3.
+  # limits.
   throttle('super_admin_password/ip', limit: 5, period: 30.minutes) do |req|
     # Covers the token-submission verbs too, not just the request-a-reset POST
     # — the token guess is the half of this flow that ends in a session.

@@ -1,14 +1,13 @@
 # Fork overlay for AutomationRule, resolved through the upstream
 # `AutomationRule.prepend_mod_with('AutomationRule')` hook. Two concerns:
 #
-# 1. **Plan quota on create** — Custom::Concerns::QuotaGuard (see
-#    docs/fork/ENTITLEMENTS.md).
+# 1. **Plan quota on create** — Custom::Concerns::QuotaGuard.
 #
 # 2. **Reply authority** — an automation may not put a message in front of a
 #    customer.
 #
-#    On a meta-saas account the control plane's agent is the ONLY thing that
-#    replies (agentic-str ADR-0006). That is why plan sync force-disables
+#    On a platform-run account the control plane's agent is the ONLY thing
+#    that replies. That is why plan sync force-disables
 #    Chatwoot Captain (`captain_integration`, `captain_integration_v2`,
 #    `captain_v1_action_classifier` — all pushed as explicit `false`) and
 #    projects `agent_bots: 0` into `accounts.limits`. `automation_rules` is
@@ -53,7 +52,7 @@
 #
 # The upstream `actions_attributes` allowlist is intentionally left alone. Both
 # actions stay "supported" by the engine — this is a policy refusal specific to
-# how meta-saas runs the account, and it deserves its own message rather than
+# how the platform runs the account, and it deserves its own message rather than
 # upstream's generic "not supported".
 module Custom::AutomationRule
   # Actions that emit a customer-visible message. Keep in sync with

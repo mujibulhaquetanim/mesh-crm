@@ -6,7 +6,7 @@
 #   Usage: scripts/build-ce-image.sh <git-sha>        (a commit on origin/develop)
 #   Prints the image tag on success: mesh-crm:<sha>
 #
-# Why (docs/fork/MIT_ONLY.md): enterprise/ is licensed for production only with a
+# Why: enterprise/ is licensed for production only with a
 # paid Chatwoot Enterprise licence, and while it is loaded its nightly
 # ReconcilePlanConfigService resets the Zasmate branding rows to Chatwoot's.
 # DISABLE_ENTERPRISE=true does not help on this fork: with custom/ present,
@@ -15,10 +15,9 @@
 # upstream's own CE image uses (.github/workflows/publish_foss_docker.yml).
 #
 # Steps, each one stopping the script on failure:
-#   0. the owner's rebuild rule (docs/fork/README.md ground rule 9): <sha> must
-#      carry upstream/develop's latest, and every paid feature upstream moved
-#      into the MIT core since the last review must have been made available
-#      (scripts/fork-policy/core-moves.py, UPSTREAM_SYNC.md §5c)
+#   0. the rebuild rule: <sha> must carry upstream/develop's latest, and every
+#      paid feature upstream moved into the MIT core since the last review must
+#      have been made available (scripts/fork-policy/core-moves.py)
 #   1. fresh clone at <sha> (never the working checkout: untracked folders would
 #      land in the image)
 #   2. fork policy check on the clone (brand + vendor feature policy)

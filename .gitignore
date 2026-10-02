@@ -106,3 +106,6 @@ CLAUDE.local.md
 local/
 Procfile.worktree
 .nodeterm/project.json
+
+# Local browser-automation state
+.gstack/

@@ -20,7 +20,7 @@ import { useQuota } from 'dashboard/composables/useQuota';
 const getters = useStoreGetters();
 const store = useStore();
 const { t } = useI18n();
-// Disable "Add Agent" at the plan cap (docs/fork/ENTITLEMENTS.md). Inert until a
+// Disable "Add Agent" at the plan cap. Inert until a
 // cap is reached: `allowed: null` (unlimited) keeps `atQuotaLimit` false, so this
 // is identical to upstream on installs with no `agents` limit set.
 const { atQuotaLimit, quotaTitle } = useQuota('agents');

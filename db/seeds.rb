@@ -10,9 +10,7 @@ end
 
 ## Seeds for Local Development
 #
-# `Rails.env.development?`, not `unless Rails.env.production?`
-# (../agentic-str/docs/backlog/13-chatwoot-agent-visibility-and-quota-caps.md,
-# P5):
+# `Rails.env.development?`, not `unless Rails.env.production?`:
 # this block creates a SuperAdmin with a well-known default credential
 # (`john@acme.inc` / `Password1!`). `unless production?` let it run in any
 # non-production environment, including staging — and staging is
@@ -23,7 +21,7 @@ end
 # Test does not need this data: specs build their own fixtures via
 # FactoryBot (see spec/factories/) rather than relying on this seed, and the
 # isolated rspec stack (docker-compose.rspec.yaml) never invokes db:seed —
-# only db:create/db:schema:load (docs/fork/DEV_SETUP.md).
+# only db:create/db:schema:load.
 if Rails.env.development?
 
   # Enables creating additional accounts from dashboard

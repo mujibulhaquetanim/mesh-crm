@@ -1,9 +1,9 @@
-// Zasmate fork (docs/fork/UPSTREAM_DIFF.md §5, docs/fork/VENDOR_FEATURE_POLICY.md).
+// Zasmate fork.
 //
 // Voice (Twilio) and WhatsApp calling run entirely on the enterprise-only
 // backend: the Call model, the calls API and the Twilio voice webhooks all live
 // in enterprise/, and config/routes.rb draws their routes only when that folder
-// exists. The production image is built without it (docs/fork/MIT_ONLY.md), but
+// exists. The production image is built without it, but
 // upstream's "Add inbox" list pushes both tiles unconditionally, so a vendor saw
 // a calling channel that can never ring.
 //

@@ -1,5 +1,4 @@
-# Controller-level quota rejection with the shared 402 contract
-# (docs/fork/ENTITLEMENTS.md). Extends the upstream 402 `{ error: }` shape
+# Controller-level quota rejection with the shared 402 contract. Extends the upstream 402 `{ error: }` shape
 # additively — never change or remove the existing keys.
 module Custom::Concerns::QuotaEnforcement
   private

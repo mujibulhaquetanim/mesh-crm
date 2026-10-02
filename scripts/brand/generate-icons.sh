@@ -14,10 +14,9 @@
 # ── The masters (2026-09-28 artwork) ────────────────────────────────────────
 #   docs/brand/zasmate-mark.png      the orange "Z" + sparkle
 #   docs/brand/zasmate-wordmark.png  the orange ZASMATE wordmark
-# Both are RGBA on a TRANSPARENT background, the same files as agentic-str's
-# docs/logo_photos/. There is no keying step any more: the old JPEG masters sat
-# on an opaque #F7F7F7 field and had to be floodfilled off it
-# (docs/fork/error-log/2026-09-22-transparent-matches-globally-and-punches-out-the-logo.md).
+# Both are RGBA on a TRANSPARENT background. There is no keying step any more:
+# the old JPEG masters sat on an opaque #F7F7F7 field and had to be floodfilled
+# off it (a global `-transparent` punched the white Z out of every icon).
 #
 # Trimming uses an alpha threshold rather than a plain `-trim`: the masters
 # carry a few near-transparent specks outside the artwork, and a plain trim

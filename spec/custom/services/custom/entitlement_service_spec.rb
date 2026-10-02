@@ -54,7 +54,7 @@ RSpec.describe Custom::EntitlementService do
     end
   end
 
-  describe 'platform-managed resources (ADR-0005)' do
+  describe 'platform-managed resources' do
     it 'excludes platform-managed agent bots from the count' do
       create(:agent_bot, account: account)
       create(:agent_bot, account: account, platform_managed: true)

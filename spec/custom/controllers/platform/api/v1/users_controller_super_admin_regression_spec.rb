@@ -1,14 +1,11 @@
 require 'rails_helper'
 
-# Fork regression guard
-# (../agentic-str/docs/backlog/13-chatwoot-agent-visibility-and-quota-caps.md,
-# P5, hardening-plan items 1/5): the Platform
+# Fork regression guard: the Platform
 # API — the ONLY path the control plane uses to provision tenant users
-# (`docs/fork/CHATWOOT_ENGINE_INTEGRATION.md` §11: `POST /platform/api/v1/users`)
+# (`POST /platform/api/v1/users`)
 # — must never be able to mint a `SuperAdmin`. `SuperAdmin` is STI on the same
 # `users` table as tenant agents (`type` column) and guards the whole-instance
-# `/super_admin` console with a password-only login (no MFA) — see
-# `docs/fork/SUPER_ADMIN.md` §2. If a tenant-facing create path could set
+# `/super_admin` console with a password-only login (no MFA). If a tenant-facing create path could set
 # `type`, a vendor with nothing but their own provisioning request could hand
 # themselves cross-tenant control of the entire installation.
 #
