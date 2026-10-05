@@ -58,7 +58,90 @@ module Custom::Channel::Whatsapp
     provider_config.to_h.except(*meta_app_secret_keys)
   end
 
+  # ## Manual setup must use a token from the installation's Meta app
+  #
+  # Meta signs each webhook delivery with the secret of the app that owns the
+  # WABA subscription, and manual setup subscribes the app the TOKEN belongs to
+  # (`Whatsapp::WebhookSetupService#setup_webhook`). Once the installation has a
+  # `WHATSAPP_APP_SECRET`, `Custom::Webhooks::WhatsappController` requires a
+  # signature it can verify, and on a channel with no secret of its own that
+  # installation secret is the only candidate. So a token from any other Meta
+  # app produced an inbox that answered every inbound message with a bare 401,
+  # while the inbox UI showed nothing at all.
+  #
+  # This refuses that setup instead, through upstream's own credential
+  # validation, so both setup paths (the classic form and Manual V2's
+  # `create!`) show the message, and so the factory's
+  # `validate_provider_config: false` switch covers it like every other remote
+  # credential check.
+  #
+  # Fails closed: `debug_token` answers only for a token from the same app as
+  # the app token asking, so a token is accepted only when Meta positively names
+  # the installation app. Not checked when the channel carries its own app
+  # secret (verification then has a matching candidate), for embedded signup
+  # (the installation app issued that token itself), when the token is
+  # unchanged, or when the installation has no app secret (upstream behavior).
+  TOKEN_APP_ERROR =
+    'access token could not be confirmed as coming from the Meta app this installation verifies WhatsApp ' \
+    'webhooks with. A token from a different Meta app gets every incoming message rejected. ' \
+    'Use a token generated from that app.'.freeze
+
   private
+
+  def validate_provider_config
+    super
+    return if errors[:provider_config].any?
+    return unless token_app_check_required?
+
+    token_app_id, reason = token_app_verdict
+    return if reason.nil?
+
+    log_token_app_refusal(token_app_id, reason)
+    errors.add(:provider_config, TOKEN_APP_ERROR)
+  end
+
+  def token_app_check_required?
+    provider == 'whatsapp_cloud' &&
+      provider_config['source'] != 'embedded_signup' &&
+      GlobalConfigService.load('WHATSAPP_APP_SECRET', nil).present? &&
+      !carries_own_meta_app_secret? &&
+      provider_config_in_database.to_h['api_key'] != provider_config['api_key']
+  end
+
+  # Present on this write, or stored and about to be carried over by
+  # `retain_stored_meta_app_secrets` (which runs after validation).
+  def carries_own_meta_app_secret?
+    incoming = provider_config.to_h.stringify_keys
+    incoming.slice(*meta_app_secret_keys).values.any?(&:present?) || retainable_meta_app_secrets(incoming).any?
+  end
+
+  # [token_app_id, nil] when the token is the installation app's, otherwise
+  # [token_app_id_or_nil, reason].
+  def token_app_verdict
+    installation_app_id = GlobalConfigService.load('WHATSAPP_APP_ID', nil).to_s
+    return [nil, 'installation_app_id_missing'] if installation_app_id.blank?
+
+    data = Whatsapp::FacebookApiClient.new.debug_token(provider_config['api_key']).to_h['data'].to_h
+    token_app_id = data['app_id'].to_s.presence
+    return [token_app_id, 'token_invalid'] unless data['is_valid'] == true
+    return [token_app_id, 'foreign_app'] unless token_app_id == installation_app_id
+
+    [token_app_id, nil]
+  rescue StandardError => e
+    # The class only: the Graph error body is not ours to log verbatim.
+    [nil, "lookup_failed:#{e.class.name}"]
+  end
+
+  # App ids are public identifiers; the token and the secrets never appear.
+  def log_token_app_refusal(token_app_id, reason)
+    Rails.logger.warn(
+      '[WHATSAPP_TOKEN_APP] refused ' \
+      "phone_number=#{phone_number.to_s.inspect} " \
+      "account_id=#{account_id || 'none'} " \
+      "token_app_id=#{token_app_id.to_s.inspect} " \
+      "reason=#{reason}"
+    )
+  end
 
   # Deliberately the controller concern's list rather than a copy of it: these
   # two must never disagree about what counts as an app secret, because the
