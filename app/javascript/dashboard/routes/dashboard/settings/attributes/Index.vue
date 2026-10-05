@@ -18,12 +18,13 @@ import {
 } from 'dashboard/composables/store';
 import { useAccount } from 'dashboard/composables/useAccount';
 import { useQuota } from 'dashboard/composables/useQuota';
+import { FEATURE_FLAGS } from 'dashboard/featureFlags';
 
 const { t } = useI18n();
 
 const getters = useStoreGetters();
 const store = useStore();
-const { currentAccount } = useAccount();
+const { currentAccount, isCloudFeatureEnabled } = useAccount();
 const { atQuotaLimit, quotaTitle } = useQuota('custom_attribute_definitions');
 const inboxes = useMapGetter('inboxes/getInboxes');
 
@@ -34,7 +35,11 @@ const uiFlags = computed(() => getters['attributes/getUIFlags'].value);
 const [showEditPopup, toggleEditPopup] = useToggle(false);
 const [showDeletePopup, toggleDeletePopup] = useToggle(false);
 const selectedAttribute = ref({});
-const attributeModels = ['conversation_attribute', 'contact_attribute'];
+const attributeModels = [
+  'conversation_attribute',
+  'contact_attribute',
+  'company_attribute',
+];
 
 const openAddPopup = () => {
   toggleAddPopup(true);
@@ -61,6 +66,9 @@ const tabs = computed(() => {
       key: 1,
       name: t('ATTRIBUTES_MGMT.TABS.CONTACT'),
     },
+    ...(isCloudFeatureEnabled(FEATURE_FLAGS.COMPANIES)
+      ? [{ key: 2, name: t('ATTRIBUTES_MGMT.TABS.COMPANY') }]
+      : []),
   ];
 });
 
