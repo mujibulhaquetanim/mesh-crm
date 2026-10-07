@@ -688,7 +688,7 @@ en:
       custom_domain_not_configured: 'Custom domain is not configured'
   installation:
     onboarding:
-      heading: 'Howdy, Welcome to Chatwoot 👋'
+      heading: 'Howdy, Welcome to Zasmate 👋'
       name: 'Name'
       name_placeholder: 'Enter your full name. eg: Bruce Wayne'
       company: 'Company Name'
@@ -903,7 +903,7 @@ en:
       pages:
         general: 'General'
         internal: 'Internal'
-        internal_description: 'Keys and switches used by Chatwoot Cloud'
+        internal_description: 'Keys and switches used by Zasmate Cloud'
       configure: 'Configure'
       enterprise_badge: 'EE'
       included: 'Included'
@@ -913,7 +913,7 @@ en:
       description: 'Update your instance settings, access billing portal'
       configure_title: 'Configure Settings - %{config}'
       alert: 'Alert!'
-      unauthorized_changes: 'Unauthorized premium changes detected in Chatwoot. To keep using them, please upgrade your plan.'
+      unauthorized_changes: 'Unauthorized premium changes detected in Zasmate. To keep using them, please upgrade your plan.'
       contact_for_help: 'Contact for help:'
       agents_over_limit: 'You have %{count} agents. Please add more licenses to add more users.'
       current_plan: 'Current plan'
