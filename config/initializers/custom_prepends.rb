@@ -91,4 +91,11 @@ Rails.application.config.to_prepare do
     Integrations::App,
     Custom::Integrations::App
   )
+
+  # HUMAN_AGENT tag: upstream treats any User sender as a person, including the
+  # platform-managed identity automated replies are posted as. Both classes that
+  # include Facebook::HumanAgentTagHelpers get the narrower check. See
+  # custom/app/services/custom/human_agent_tag_platform_guard.rb.
+  human_agent_tag_senders = [Facebook::SendOnFacebookService, Instagram::BaseSendService]
+  human_agent_tag_senders.each { |target| Custom::PrependOnce.call(target, Custom::HumanAgentTagPlatformGuard) }
 end
