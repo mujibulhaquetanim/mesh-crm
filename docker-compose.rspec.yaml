@@ -64,6 +64,12 @@ services:
       # run with the flag ON (see error-log 2026-07-10). Specs that need it on
       # stub GlobalConfigService instead.
       ENABLE_SSO_ONLY_LOGIN: "false"
+      # Specs that render a page (dashboard_controller_spec, super_admin) make
+      # vite_ruby auto-build public/vite-test. With Node's default heap that
+      # build dies "JavaScript heap out of memory", leaves no manifest, and every
+      # such example fails ~90 s later. Same limit as the vite service and the
+      # production Dockerfile.
+      NODE_OPTIONS: --max-old-space-size=4096
 
     depends_on:
       postgres-test:

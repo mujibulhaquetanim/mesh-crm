@@ -2,12 +2,18 @@
 <%# (upstream revision 42f6621afb4e8a4ba5b6c121ca54bf46ac345fab, 2024-10-02, %>
 <%# "feat: Vite + vue 3"). custom/app/views takes precedence over app/views %>
 <%# (config/application.rb), so this file is a byte-for-byte copy of the %>
-<%# upstream template with exactly one addition: the FORK block below, which %>
+<%# upstream template with two additions: the robots noindex meta upstream %>
+<%# later added to its own copy, and the FORK block below, which %>
 <%# adds the otp_attempt field when SUPER_ADMIN_ENFORCE_MFA is on. See %>
 <%# custom/app/controllers/custom/super_admin/devise/sessions_controller.rb. %>
+<%# Upstream has since redesigned this page (ccbda8b37, a standalone layout); %>
+<%# this overlay still renders the 2024 design. %>
 <!DOCTYPE html>
 <html>
   <head>
+    <%# FORK: upstream added this to its own template in fcfad2d2b (#15873); %>
+    <%# this overlay shadows that template, so it has to carry it too. %>
+    <meta name="robots" content="noindex">
     <title>SuperAdmin | Chatwoot</title>
     <%= vite_client_tag %>
     <%= vite_javascript_tag 'superadmin' %>

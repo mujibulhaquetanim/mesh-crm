@@ -50,7 +50,10 @@ BRAND_ASSETS = ['logo.svg', 'logo_dark.svg', 'logo_thumbnail.svg']
 # Custom::VendorFeaturePolicy::BLOCKED_INTEGRATION_APPS; the check enforces it.
 BLOCKED_APPS = {'openai', 'dialogflow'}
 ALLOWED_APPS = {'webhooks', 'dashboard_apps', 'linear', 'notion', 'slack',
-                'google_translate', 'dyte', 'shopify', 'leadsquared'}
+                'google_translate', 'dyte', 'shopify', 'leadsquared',
+                # Stripe (2026-10-08 sync): reads a customer's billing details into
+                # the conversation sidebar; not a reply path or a second AI.
+                'stripe'}
 
 # (check id, file, regex that must match, what it means when it does not)
 POLICY_REQUIREMENTS = [
