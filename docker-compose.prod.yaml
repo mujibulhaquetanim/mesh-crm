@@ -90,6 +90,14 @@ x-app: &app
     # no signal at boot. `scripts/check-prod-env.py` fails closed on exactly this.
     ACTIVE_STORAGE_SERVICE: ${CRM_ACTIVE_STORAGE_SERVICE:-s3_compatible}
 
+    # ── Request timeout. rack-timeout defaults to 15 s, and WhatsApp Embedded
+    # Signup (POST /api/v1/accounts/:id/whatsapp/authorization) runs the code
+    # exchange, channel create, phone /register and subscribed_apps calls to
+    # Meta inside ONE request. /register alone can exceed the remainder, and the
+    # timeout fires after the channel row is committed but before the webhook
+    # subscription, leaving an inbox that never receives messages.
+    RACK_TIMEOUT_SERVICE_TIMEOUT: ${CRM_RACK_TIMEOUT_SERVICE_TIMEOUT:-60}
+
 services:
   redis:
     image: redis:7-alpine
