@@ -98,4 +98,7 @@ Rails.application.config.to_prepare do
   # custom/app/services/custom/human_agent_tag_platform_guard.rb.
   human_agent_tag_senders = [Facebook::SendOnFacebookService, Instagram::BaseSendService]
   human_agent_tag_senders.each { |target| Custom::PrependOnce.call(target, Custom::HumanAgentTagPlatformGuard) }
+
+  # WhatsApp overlays live in custom_prepends_whatsapp.rb (this block is at
+  # rubocop's length limit).
 end
