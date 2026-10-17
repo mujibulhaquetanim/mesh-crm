@@ -901,12 +901,12 @@ en:
         details_link: 'User details'
       sessions:
         heading: 'Mobile sessions'
-        description: 'Populated from the X-Chatwoot-* headers the app sends on every request, so it reflects the build currently installed on the device.'
+        description: 'Populated from the client headers the mobile app sends on every request, so it reflects the build currently installed on the device.'
         empty:
           title: 'No mobile sessions recorded.'
           description: 'This user has not signed in from the iOS or Android app.'
         legacy_build: 'legacy build'
-        legacy_note: '"legacy build" means the session predates app version 4.8.0, which is when the app began sending X-Chatwoot-Client-Version. The exact build is unknown.'
+        legacy_note: '"legacy build" means the session predates app version 4.8.0, which is when the app began sending its client version header. The exact build is unknown.'
         columns:
           app_version: 'App version'
           platform: 'Platform'
