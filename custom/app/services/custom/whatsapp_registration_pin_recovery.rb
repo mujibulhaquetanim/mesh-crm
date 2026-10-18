@@ -14,6 +14,13 @@
 # it like upstream does. Any other failure keeps upstream behaviour unchanged.
 # The PIN is never logged.
 #
+# ⚠ Meta sets a PIN only on a REGISTERED number: after an inbox delete the
+# number is deregistered and the reset fails with (#133010) "The account is not
+# registered" (seen in production 2026-10-17). That case is covered earlier by
+# Custom::WhatsappPinMemory, which registers with the PIN the deleted inbox set.
+# This recovery remains for a number that is still registered under a PIN we
+# never stored (e.g. a signup cut off before `store_pin`).
+#
 # Prepended onto Whatsapp::WebhookSetupService from
 # config/initializers/custom_prepends.rb, so the upstream file is not edited.
 # Spec: spec/custom/services/custom/whatsapp_registration_pin_recovery_spec.rb.

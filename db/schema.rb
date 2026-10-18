@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_10_14_152259) do
+ActiveRecord::Schema[7.1].define(version: 2026_10_17_235345) do
   # These extensions should be enabled to support this database
   enable_extension "pg_stat_statements"
   enable_extension "pg_trgm"
@@ -1114,6 +1114,14 @@ ActiveRecord::Schema[7.1].define(version: 2026_10_14_152259) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_custom_roles_on_account_id"
+  end
+
+  create_table "custom_whatsapp_number_pins", force: :cascade do |t|
+    t.string "phone_number_id", null: false
+    t.string "pin", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["phone_number_id"], name: "index_custom_whatsapp_number_pins_on_phone_number_id", unique: true
   end
 
   create_table "dashboard_apps", force: :cascade do |t|

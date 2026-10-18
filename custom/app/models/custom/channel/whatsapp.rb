@@ -176,4 +176,19 @@ module Custom::Channel::Whatsapp
       retained[key] = stored[key] if stored[key].present?
     end
   end
+
+  # Upstream's `before_destroy` deregisters the number at Meta and then the row,
+  # holding the only copy of the number's two-step PIN, is gone. Meta keeps the
+  # PIN, so remember it first (Custom::WhatsappNumberPin) and the next inbox for
+  # this number can register with it. A failure here must never block a delete.
+  def teardown_webhooks
+    remember_two_step_pin
+    super
+  end
+
+  def remember_two_step_pin
+    Custom::WhatsappNumberPin.remember(provider_config['phone_number_id'], provider_config['verification_pin'])
+  rescue StandardError => e
+    Rails.logger.error("[WHATSAPP] Could not remember the two-step PIN for channel #{id}: #{e.class.name}")
+  end
 end
