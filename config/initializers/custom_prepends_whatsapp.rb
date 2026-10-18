@@ -9,4 +9,9 @@ Rails.application.config.to_prepare do
   # custom/app/services/custom/whatsapp_registration_pin_recovery.rb.
   Custom::PrependOnce.call(Whatsapp::FacebookApiClient, Custom::WhatsappTwoStepPin)
   Custom::PrependOnce.call(Whatsapp::WebhookSetupService, Custom::WhatsappRegistrationPinRecovery)
+
+  # PIN memory: a re-added number registers with the PIN its deleted inbox set,
+  # because after a delete the number is deregistered and the API can no longer
+  # reset it (#133010). See custom/app/services/custom/whatsapp_pin_memory.rb.
+  Custom::PrependOnce.call(Whatsapp::WebhookSetupService, Custom::WhatsappPinMemory)
 end
