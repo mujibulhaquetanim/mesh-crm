@@ -98,6 +98,20 @@ x-app: &app
     # subscription, leaving an inbox that never receives messages.
     RACK_TIMEOUT_SERVICE_TIMEOUT: ${CRM_RACK_TIMEOUT_SERVICE_TIMEOUT:-60}
 
+    # ── S3 checksums. aws-sdk-s3 (1.178+) adds a CRC32 checksum to every
+    # upload by default, and ActiveStorage also sends Content-MD5. Cloudflare R2
+    # refuses a request carrying both: `InvalidRequest: You can only specify
+    # one non-default checksum at a time.` Every attachment upload then fails.
+    # An outgoing message with images is created and answers 422 without being
+    # sent, and an incoming customer photo leaves a blob row with no object
+    # (ActiveStorage::FileNotFoundError on its preview). Measured against the
+    # live bucket on 2026-10-18: default → InvalidRequest; with these two →
+    # upload, exist? and download all succeed. `when_required` keeps checksums
+    # where an operation needs one, so Content-MD5 still guards each upload.
+    # Safe on AWS S3 too. aws-sdk-core reads both variables itself (3.217+).
+    AWS_REQUEST_CHECKSUM_CALCULATION: ${CRM_AWS_REQUEST_CHECKSUM_CALCULATION:-when_required}
+    AWS_RESPONSE_CHECKSUM_VALIDATION: ${CRM_AWS_RESPONSE_CHECKSUM_VALIDATION:-when_required}
+
 services:
   redis:
     image: redis:7-alpine
