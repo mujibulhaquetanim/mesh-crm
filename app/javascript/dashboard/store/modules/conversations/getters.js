@@ -10,6 +10,10 @@ import {
   sortComparator,
 } from './helpers';
 import filterQueryGenerator from 'dashboard/helper/filterQueryGenerator';
+import {
+  TRANSLATION_PROVIDERS,
+  translationProvider,
+} from 'dashboard/helper/translationProvider';
 import { createFiltersMatcher } from './helpers/filterHelpers';
 import {
   getUserPermissions,
@@ -210,13 +214,21 @@ const getters = {
       _getters.getSelectedChat.additional_attributes?.conversation_language;
     const isFeatureEnabled = feature =>
       rootGetters['accounts/isFeatureEnabledonAccount'](accountId, feature);
+    const googleConnected =
+      !!rootGetters['integrations/getIntegration']('google_translate').enabled;
+    const provider = translationProvider(account.settings);
+    const serviceAvailable =
+      provider === TRANSLATION_PROVIDERS.GOOGLE
+        ? googleConnected
+        : isFeatureEnabled(FEATURE_FLAGS.CAPTAIN_TASKS);
     const enabled =
       isFeatureEnabled(FEATURE_FLAGS.AUTO_TRANSLATE) &&
-      isFeatureEnabled(FEATURE_FLAGS.CAPTAIN_TASKS) &&
-      account.settings?.auto_translate === true;
+      account.settings?.auto_translate === true &&
+      serviceAvailable;
 
     return {
       enabled,
+      provider,
       locale,
       sameLanguage:
         !!language && languageCode(language) === languageCode(locale),
@@ -243,13 +255,6 @@ const getters = {
         (message.status === MESSAGE_STATUS.PROGRESS &&
           !message.private &&
           !attributes.forwarded_message_id);
-    // The own text stored as the translation marks a message already in the agent language; once a translated
-    // thread switched to the agent language, its untranslated messages are in it too.
-    const alreadyInAgentLanguage = translation
-      ? translation === message.content
-      : sameLanguage &&
-        messages.some(item => item.content_attributes?.translations);
-
     return {
       pending:
         enabled &&
@@ -258,8 +263,9 @@ const getters = {
         !attributes.translation_failed &&
         waiting,
       failed: enabled && !!attributes.translation_failed,
+      // A message already in the agent language is stored with its own text as the translation.
       sameLanguage:
-        enabled && translatable && !foreign && alreadyInAgentLanguage,
+        enabled && translatable && !foreign && translation === message.content,
       sourceLanguage: attributes.source_language
         ? languageName(attributes.source_language)
         : language,
