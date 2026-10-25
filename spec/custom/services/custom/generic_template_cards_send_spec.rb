@@ -21,8 +21,93 @@ RSpec.describe Custom::GenericTemplateCardsSend do
                      inbox: inbox, account: account, conversation: conversation)
   end
 
-  it 'is prepended onto the Messenger send service' do
+  it 'is prepended onto both send services' do
     expect(Facebook::SendOnFacebookService.ancestors).to include(described_class)
+    expect(Instagram::BaseSendService.ancestors).to include(described_class)
+  end
+
+  # Instagram Login (graph.instagram.com) and Instagram through a Page
+  # (graph.facebook.com) share Instagram::BaseSendService and its order:
+  # attachments, then the text, then (the overlay) the template.
+  shared_examples 'an Instagram cards send' do
+    # The conversation (and so the channel) first: creating an Instagram
+    # channel posts to Meta itself, and that call must not count as a send.
+    before do
+      create(:message, message_type: :incoming, inbox: inbox, account: account, conversation: conversation)
+      allow(HTTParty).to receive(:post) do |_url, options|
+        bodies << options[:body]
+        responses.shift || ok_response("ig.mid.#{bodies.size}")
+      end
+    end
+
+    let(:bodies) { [] }
+    let(:responses) { [] }
+    let(:contact) { create(:contact, account: account) }
+    let(:contact_inbox) { create(:contact_inbox, contact: contact, inbox: inbox) }
+    let(:conversation) { create(:conversation, contact: contact, inbox: inbox, contact_inbox: contact_inbox) }
+
+    def ok_response(mid)
+      instance_double(HTTParty::Response, success?: true, body: { message_id: mid }.to_json,
+                                          parsed_response: { 'message_id' => mid })
+    end
+
+    def refused_response
+      body = { 'error' => { 'code' => 100, 'message' => 'Invalid parameter' } }
+      instance_double(HTTParty::Response, success?: false, body: body.to_json, parsed_response: body)
+    end
+
+    it 'sends attachments, then the text, then the template, and stores the template mid' do
+      message = cards_message(inbox, conversation)
+      photo = message.attachments.new(account_id: account.id, file_type: :image)
+      photo.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
+      message.save!
+      service_class.new(message: message).perform
+
+      expect(bodies.size).to eq(3)
+      expect(bodies[0].dig(:message, :attachment, :type)).to eq('image')
+      expect(bodies[1][:message]).to eq({ text: 'Here you go' })
+      expect(bodies[2].dig(:message, :attachment, :payload, :template_type)).to eq('generic')
+      expect(message.reload.source_id).to eq('ig.mid.3')
+    end
+
+    it 'sends title: url lines when the template is refused, and the message ends sent' do
+      responses.push(ok_response('ig.mid.text'), refused_response)
+      message = cards_message(inbox, conversation)
+      service_class.new(message: message).perform
+
+      expect(bodies.size).to eq(3)
+      expect(bodies[2][:message]).to eq({ text: "A: https://a\nB: https://b" })
+      expect(message.reload.status).to eq('sent')
+    end
+
+    it 'leaves a non-cards message untouched, including what perform returns' do
+      message = create(:message, message_type: 'outgoing', content: 'plain', sender: agent,
+                                 inbox: inbox, account: account, conversation: conversation)
+      result = service_class.new(message: message).perform
+
+      expect(bodies.size).to eq(1)
+      expect(result).to eq({ 'message_id' => 'ig.mid.1' })
+    end
+  end
+
+  describe 'on Instagram (Instagram Login)' do
+    let(:inbox) do
+      create(:inbox, channel: create(:channel_instagram, account: account, instagram_id: 'ig-1'),
+                     account: account, greeting_enabled: false)
+    end
+    let(:service_class) { Instagram::SendOnInstagramService }
+
+    it_behaves_like 'an Instagram cards send'
+  end
+
+  describe 'on Instagram through a Page' do
+    let(:inbox) do
+      create(:inbox, channel: create(:channel_instagram_fb_page, account: account, instagram_id: 'ig-2'),
+                     account: account, greeting_enabled: false)
+    end
+    let(:service_class) { Instagram::Messenger::SendOnInstagramService }
+
+    it_behaves_like 'an Instagram cards send'
   end
 
   describe 'on Messenger' do
