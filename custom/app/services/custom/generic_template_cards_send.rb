@@ -38,11 +38,25 @@ module Custom::GenericTemplateCardsSend
     send_cards_fallback
   end
 
+  # The text already went, so the customer has the answer; what failed is the
+  # product links. Neither silent nor raised: a raise here would fail the job
+  # after the text was delivered, so the message is marked failed instead.
   def send_cards_fallback
     text = Custom::GenericTemplateCards.fallback_text(message.content_attributes['items'])
     return if text.blank?
 
-    Messages::StatusUpdateService.new(message, 'sent').perform if deliver_cards({ text: text })
+    if deliver_cards({ text: text })
+      Messages::StatusUpdateService.new(message, 'sent').perform
+    else
+      mark_cards_failed
+    end
+  rescue StandardError => e
+    Rails.logger.warn("GenericTemplateCards: fallback failed on inbox #{inbox.id}: #{e.class}")
+    mark_cards_failed
+  end
+
+  def mark_cards_failed
+    Messages::StatusUpdateService.new(message, 'failed', 'The product cards could not be delivered').perform
   end
 
   # The Meta message id, or nil when Meta refused it.

@@ -166,6 +166,32 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       expect(message.source_id).to eq('mid.3')
     end
 
+    it 'marks the message failed when the template and the fallback are both refused' do
+      refused = { error: { code: 100, message: 'Invalid parameter' } }.to_json
+      responses.push({ recipient_id: '1', message_id: 'mid.text' }.to_json, refused, refused)
+      message = cards_message(inbox, conversation)
+      perform(message)
+
+      expect(message.reload.status).to eq('failed')
+      expect(message.external_error).to be_present
+    end
+
+    it 'marks the message failed, without raising, when sending the fallback raises' do
+      responses.push({ recipient_id: '1', message_id: 'mid.text' }.to_json)
+      calls = 0
+      allow(bot).to receive(:deliver) do |params, _options|
+        calls += 1
+        deliveries << params
+        raise Errno::ECONNRESET if calls > 1
+
+        responses.shift
+      end
+      message = cards_message(inbox, conversation)
+
+      expect { perform(message) }.not_to raise_error
+      expect(message.reload.status).to eq('failed')
+    end
+
     it 'leaves a non-cards message untouched' do
       message = create(:message, message_type: 'outgoing', content: 'plain', sender: agent,
                                  inbox: inbox, account: account, conversation: conversation)
