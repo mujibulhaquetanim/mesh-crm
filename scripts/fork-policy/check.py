@@ -87,6 +87,15 @@ POLICY_REQUIREMENTS = [
      'the Voice / WhatsApp Call tiles would show on the community build, where calls cannot ring'),
     ('policy.call_tiles_rule', 'app/javascript/dashboard/fork/callChannels.js',
      r"CALL_CHANNEL_KEYS = \['voice', 'whatsapp_call'\]", 'the call-channel filter is gone or changed'),
+    # Upstream's assignment card ends with "Upgrade to Premium" -> chatwoot.com
+    # pricing on an unlicensed self-hosted install; advanced_assignment is
+    # enterprise-only. A sync that takes upstream's CollaboratorsPage.vue drops this hunk.
+    ('policy.assignment_upsell_hidden',
+     'app/javascript/dashboard/routes/dashboard/settings/inbox/settingsPage/CollaboratorsPage.vue',
+     r'<div v-if="!hasAdvancedAssignment && showPlanGuidance">',
+     "vendors would see an 'Upgrade to Premium' link to chatwoot.com pricing in inbox settings"),
+    ('policy.assignment_upsell_rule', 'app/javascript/dashboard/fork/assignmentUpsell.js',
+     r'\}\) => isOnChatwootCloud \|\| isLicensedSelfHosted;', 'the assignment upsell rule is gone or changed'),
     ('policy.voice_flag_served', 'custom/app/models/custom/account.rb',
      r'def feature_channel_voice\?\s*\n\s*Custom::Account\.calls_served\? && super',
      'channel_voice would switch on call buttons and tabs a build without the Call model cannot serve'),
