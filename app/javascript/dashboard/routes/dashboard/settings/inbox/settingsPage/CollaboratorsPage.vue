@@ -8,6 +8,7 @@ import { minValue } from '@vuelidate/validators';
 import { useAlert } from 'dashboard/composables';
 import { useConfig } from 'dashboard/composables/useConfig';
 import { useAccount } from 'dashboard/composables/useAccount';
+import { showsAssignmentPlanGuidance } from 'dashboard/fork/assignmentUpsell';
 import SettingsFieldSection from 'dashboard/components-next/Settings/SettingsFieldSection.vue';
 import SettingsAccordion from 'dashboard/components-next/Settings/SettingsAccordion.vue';
 import NextButton from 'dashboard/components-next/button/Button.vue';
@@ -37,6 +38,14 @@ const isLicensedSelfHosted = computed(
     !isOnChatwootCloud.value &&
     isEnterprise &&
     enterprisePlanName !== 'community'
+);
+
+// Zasmate fork: no plan upsell where the feature can't be bought (dashboard/fork/assignmentUpsell.js).
+const showPlanGuidance = computed(() =>
+  showsAssignmentPlanGuidance({
+    isOnChatwootCloud: isOnChatwootCloud.value,
+    isLicensedSelfHosted: isLicensedSelfHosted.value,
+  })
 );
 
 const selectedAgentIds = ref([]);
@@ -634,10 +643,13 @@ onMounted(() => {
                     </li>
                   </ul>
 
-                  <div class="w-full h-px bg-n-weak my-4" />
+                  <div
+                    v-if="showPlanGuidance"
+                    class="w-full h-px bg-n-weak my-4"
+                  />
 
                   <!-- Enablement guidance when advanced_assignment is not enabled -->
-                  <div v-if="!hasAdvancedAssignment">
+                  <div v-if="!hasAdvancedAssignment && showPlanGuidance">
                     <p
                       v-if="isLicensedSelfHosted"
                       class="text-body-main text-n-slate-11 mb-1"
