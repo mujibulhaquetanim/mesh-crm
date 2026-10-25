@@ -150,6 +150,11 @@ RSpec.describe 'Quota enforcement on account APIs', type: :request do
     end
     let(:existing_record) { create(:integrations_hook, account: account) }
 
+    # Upstream validates Google Translate credentials against Google on create
+    # (Integrations::GoogleTranslate::CredentialsValidator); this spec is about
+    # the quota, so it stubs that the way upstream's own specs do.
+    before { allow(Integrations::GoogleTranslate::CredentialsValidator).to receive(:valid?).and_return(true) }
+
     it_behaves_like 'a quota guarded create endpoint'
   end
 

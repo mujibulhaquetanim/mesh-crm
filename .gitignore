@@ -109,3 +109,5 @@ Procfile.worktree
 
 # Local browser-automation state
 .gstack/
+# Cache that `rake ruby_llm:refresh_models` writes next to the model registry
+config/llm_models.json.published.json

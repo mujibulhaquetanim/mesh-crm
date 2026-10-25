@@ -24,7 +24,9 @@ RSpec.describe Captain::Conversation::AgentMessageTranslationService do
     described_class.new(message: message).perform
 
     expect(message.reload.content).to eq('Bonjour')
-    expect(message.content_attributes).to eq('translations' => { 'en' => 'Hello there' }, 'source_language' => 'fr')
+    expect(message.content_attributes).to eq(
+      'translations' => { 'en' => 'Hello there' }, 'source_language' => 'fr', 'translation_provider' => 'captain'
+    )
   end
 
   it 'keys the typed text by the language it was written in' do
@@ -129,6 +131,19 @@ RSpec.describe Captain::Conversation::AgentMessageTranslationService do
     broadcast_attributes = email.previous_changes['content_attributes'].last
     expect(broadcast_attributes['translations'].values.first).to be_an_instance_of(String)
     expect(broadcast_attributes.dig('email', 'html_content', 'full')).to be_an_instance_of(String)
+  end
+
+  it 'translates a template in an email inbox, which has no email html to rebuild' do
+    email_inbox = create(:inbox, account: account, channel: create(:channel_email, account: account))
+    email_conversation = create(:conversation, account: account, inbox: email_inbox, additional_attributes: { 'conversation_language' => 'fr' })
+    template = create(:message, account: account, inbox: email_inbox, conversation: email_conversation, message_type: :template,
+                                content: 'Hello there', content_attributes: { translation_pending: true })
+
+    described_class.new(message: template).perform
+
+    expect(template.reload.content).to eq('Bonjour')
+    expect(template.translations).to eq('en' => 'Hello there')
+    expect(template.content_attributes['email']).to be_nil
   end
 
   it 'sends the reply as written and flags it when the translator fails' do
