@@ -41,11 +41,26 @@ RSpec.describe Custom::GenericTemplateCards do
                     'actions' => [link.merge('text' => 'বিস্তারিত দেখুন, এখনই অর্ডার করুন')])]
       ).first
 
-      expect(element[:title].length).to eq(80)
+      expect(element[:title].length).to be <= 80
       expect(element[:title]).to end_with('…')
-      expect(element[:subtitle].length).to eq(80)
-      expect(element[:buttons].first[:title].length).to eq(20)
+      expect(element[:subtitle].length).to be <= 80
+      expect(element[:buttons].first[:title].length).to be <= 20
       expect(element[:title]).to be_valid_encoding
+    end
+
+    # Ruby (Unicode 15.0 tables) splits ক্ষ into two clusters, ক্ and ষ, so
+    # a cut between them would leave a dangling hasanta. 'ab' + 40 × ক্ষ puts
+    # a naive 79-character cut exactly there.
+    it 'never ends a clipped text on a hasanta or a zero-width joiner' do
+      title = described_class.elements([item.merge('title' => "ab#{'ক্ষ' * 40}")]).first[:title]
+      family = '👨‍👩‍👧'
+      emoji = described_class.elements([item.merge('title' => "a#{family * 20}")]).first[:title]
+
+      expect(title.length).to be <= 80
+      expect(title.delete_suffix('…')).not_to end_with("\u09CD")
+      expect(emoji.length).to be <= 80
+      expect(emoji.delete_suffix('…')).not_to end_with("\u200D")
+      expect(emoji.delete_suffix('…').grapheme_clusters.last).to eq(family)
     end
 
     it 'keeps at most 10 elements and 3 buttons' do
@@ -72,6 +87,10 @@ RSpec.describe Custom::GenericTemplateCards do
   end
 
   describe '.fallback_text' do
+    it 'accepts a title that is not a string' do
+      expect(described_class.fallback_text([item.merge('title' => 123)])).to eq('123: https://shop.example/p/1')
+    end
+
     it 'lists "title: uri" per item with a link' do
       other = item.merge('title' => 'Blue Kurta', 'actions' => [link.merge('uri' => 'https://shop.example/p/2')])
       postback_only = item.merge('title' => 'No link', 'actions' => [{ 'type' => 'postback', 'payload' => 'x' }])

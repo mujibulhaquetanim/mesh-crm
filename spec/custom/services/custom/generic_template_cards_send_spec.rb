@@ -2,8 +2,10 @@ require 'rails_helper'
 
 # A `cards` message on a Messenger or Instagram inbox: upstream sends its text
 # (and attachments) as before, then the overlay sends the cards as one generic
-# template, LAST, so the template's mid is the one stored as `source_id` (the
-# echo of the last part is what the inbox recognises as its own).
+# template, LAST, so the customer reads the answer first. The message keeps the
+# TEXT's mid as `source_id`: on Instagram the inbox drops an echo only when its
+# mid matches, and the text echo is the one that would otherwise come back as
+# a duplicate of the reply.
 RSpec.describe Custom::GenericTemplateCardsSend do
   let!(:account) { create(:account) }
   let(:agent) { create(:user, account: account) }
@@ -36,7 +38,10 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       create(:message, message_type: :incoming, inbox: inbox, account: account, conversation: conversation)
       allow(HTTParty).to receive(:post) do |_url, options|
         bodies << options[:body]
-        responses.shift || ok_response("ig.mid.#{bodies.size}")
+        next_response = responses.shift
+        raise next_response if next_response.is_a?(Exception) || next_response.is_a?(Class)
+
+        next_response || ok_response("ig.mid.#{bodies.size}")
       end
     end
 
@@ -56,7 +61,7 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       instance_double(HTTParty::Response, success?: false, body: body.to_json, parsed_response: body)
     end
 
-    it 'sends attachments, then the text, then the template, and stores the template mid' do
+    it 'sends attachments, then the text, then the template, and keeps the text mid' do
       message = cards_message(inbox, conversation)
       photo = message.attachments.new(account_id: account.id, file_type: :image)
       photo.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
@@ -66,8 +71,20 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       expect(bodies.size).to eq(3)
       expect(bodies[0].dig(:message, :attachment, :type)).to eq('image')
       expect(bodies[1][:message]).to eq({ text: 'Here you go' })
-      expect(bodies[2].dig(:message, :attachment, :payload, :template_type)).to eq('generic')
-      expect(message.reload.source_id).to eq('ig.mid.3')
+      template = JSON.parse(bodies[2][:message])
+      expect(template.dig('attachment', 'payload', 'template_type')).to eq('generic')
+      expect(template.dig('attachment', 'payload', 'elements').map { |e| e['title'] }).to eq(%w[A B])
+      expect(message.reload.source_id).to eq('ig.mid.2')
+    end
+
+    # HTTParty form-encodes a Hash body, and an array of hashes becomes
+    # `elements[][title]=…&elements[][buttons][][type]=…`, which Graph parses
+    # into a different element per field. The template goes as JSON text.
+    it 'sends the template in a body that form-encodes without an array of hashes' do
+      service_class.new(message: cards_message(inbox, conversation)).perform
+
+      expect(bodies.size).to eq(2)
+      expect(HTTParty::HashConversions.to_params(bodies.last)).not_to include('%5B%5D')
     end
 
     it 'sends title: url lines when the template is refused, and the message ends sent' do
@@ -77,6 +94,26 @@ RSpec.describe Custom::GenericTemplateCardsSend do
 
       expect(bodies.size).to eq(3)
       expect(bodies[2][:message]).to eq({ text: "A: https://a\nB: https://b" })
+      expect(message.reload.status).to eq('sent')
+      expect(message.source_id).to eq('ig.mid.text')
+    end
+
+    it 'sends no cards when the text itself was refused, and keeps its error' do
+      responses.push(refused_response)
+      message = cards_message(inbox, conversation)
+      service_class.new(message: message).perform
+
+      expect(bodies.size).to eq(1)
+      expect(message.reload.status).to eq('failed')
+      expect(message.external_error).to include('Invalid parameter')
+    end
+
+    it 'sends no fallback after a read timeout (Meta may have shown the cards)' do
+      responses.push(ok_response('ig.mid.text'), Net::ReadTimeout)
+      message = cards_message(inbox, conversation)
+      service_class.new(message: message).perform
+
+      expect(bodies.size).to eq(2)
       expect(message.reload.status).to eq('sent')
     end
 
@@ -111,12 +148,17 @@ RSpec.describe Custom::GenericTemplateCardsSend do
   end
 
   describe 'on Messenger' do
-    # Before the `let!`s: creating the channel subscribes the Page.
+    # Before the `let!`s: creating the channel subscribes the Page. The real
+    # Bot.deliver RAISES a FacebookError for a refused send (the gem's
+    # ErrorParser), so the stub does the same for an Exception in `responses`.
     before do
       allow(Facebook::Messenger::Subscriptions).to receive(:subscribe).and_return(true)
       allow(bot).to receive(:deliver) do |params, _options|
         deliveries << params
-        responses.shift || { recipient_id: '1', message_id: "mid.#{deliveries.size}" }.to_json
+        next_response = responses.shift
+        raise next_response if next_response.is_a?(Exception) || next_response.is_a?(Class)
+
+        next_response || { recipient_id: '1', message_id: "mid.#{deliveries.size}" }.to_json
       end
       create(:message, message_type: :incoming, inbox: inbox, account: account, conversation: conversation)
     end
@@ -124,6 +166,7 @@ RSpec.describe Custom::GenericTemplateCardsSend do
     let(:bot) { class_double(Facebook::Messenger::Bot).as_stubbed_const }
     let(:deliveries) { [] }
     let(:responses) { [] }
+    let(:refused) { Facebook::Messenger::FacebookError.new('message' => 'Invalid parameter', 'code' => 100) }
     let!(:channel) { create(:channel_facebook_page, account: account) }
     let!(:inbox) { create(:inbox, channel: channel, account: account) }
     let(:contact) { create(:contact, account: account) }
@@ -134,7 +177,7 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       Facebook::SendOnFacebookService.new(message: message).perform
     end
 
-    it 'sends the text, then one generic template, and stores the template mid' do
+    it 'sends the text, then one generic template, and keeps the text mid' do
       message = cards_message(inbox, conversation)
       perform(message)
 
@@ -145,7 +188,15 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       expect(payload[:payload][:template_type]).to eq('generic')
       expect(payload[:payload][:elements].map { |e| e[:title] }).to eq(%w[A B])
       expect(deliveries[1][:recipient]).to eq({ id: contact_inbox.source_id })
-      expect(message.reload.source_id).to eq('mid.2')
+      expect(message.reload.source_id).to eq('mid.1')
+    end
+
+    it 'stores the template mid for a cards message with no text' do
+      message = cards_message(inbox, conversation, content: nil)
+      perform(message)
+
+      expect(deliveries.size).to eq(1)
+      expect(message.reload.source_id).to eq('mid.1')
     end
 
     it 'uses the same messaging_type as the text' do
@@ -154,42 +205,62 @@ RSpec.describe Custom::GenericTemplateCardsSend do
       expect(deliveries.map { |d| d[:messaging_type] }).to eq(%w[RESPONSE RESPONSE])
     end
 
-    it 'sends title: url lines when Meta refuses the template, and the message ends sent' do
-      responses.push({ recipient_id: '1', message_id: 'mid.text' }.to_json,
-                     { error: { code: 100, message: 'Invalid parameter' } }.to_json)
+    it "sends title: url lines when Meta refuses the template, and logs Meta's reason" do
+      allow(Rails.logger).to receive(:warn)
+      responses.push(nil, refused)
       message = cards_message(inbox, conversation)
       perform(message)
 
       expect(deliveries.size).to eq(3)
       expect(deliveries[2][:message]).to eq({ text: "A: https://a\nB: https://b" })
       expect(message.reload.status).to eq('sent')
-      expect(message.source_id).to eq('mid.3')
+      expect(Rails.logger).to have_received(:warn).with(a_string_including('Invalid parameter'))
     end
 
-    it 'marks the message failed when the template and the fallback are both refused' do
-      refused = { error: { code: 100, message: 'Invalid parameter' } }.to_json
-      responses.push({ recipient_id: '1', message_id: 'mid.text' }.to_json, refused, refused)
+    it 'sends no cards when the text itself was refused, and keeps its error' do
+      responses.push(refused)
       message = cards_message(inbox, conversation)
+      perform(message)
+
+      expect(deliveries.size).to eq(1)
+      expect(message.reload.status).to eq('failed')
+    end
+
+    # The text reached the customer; a `failed` status would invite a Retry,
+    # which re-sends the whole message.
+    it 'keeps the message sent when the cards and the fallback both fail after the text went' do
+      responses.push(nil, refused, refused)
+      message = cards_message(inbox, conversation)
+      perform(message)
+
+      expect(deliveries.size).to eq(3)
+      expect(message.reload.status).to eq('sent')
+    end
+
+    it 'marks a cards-only message failed when the cards and the fallback both fail' do
+      responses.push(refused, refused)
+      message = cards_message(inbox, conversation, content: nil)
       perform(message)
 
       expect(message.reload.status).to eq('failed')
       expect(message.external_error).to be_present
     end
 
-    it 'marks the message failed, without raising, when sending the fallback raises' do
-      responses.push({ recipient_id: '1', message_id: 'mid.text' }.to_json)
-      calls = 0
-      allow(bot).to receive(:deliver) do |params, _options|
-        calls += 1
-        deliveries << params
-        raise Errno::ECONNRESET if calls > 1
-
-        responses.shift
-      end
-      message = cards_message(inbox, conversation)
+    it 'does not raise when sending the fallback raises' do
+      responses.push(refused, Errno::ECONNRESET)
+      message = cards_message(inbox, conversation, content: nil)
 
       expect { perform(message) }.not_to raise_error
       expect(message.reload.status).to eq('failed')
+    end
+
+    it 'sends no fallback after a read timeout (Meta may have shown the cards)' do
+      responses.push(nil, Net::ReadTimeout)
+      message = cards_message(inbox, conversation)
+      perform(message)
+
+      expect(deliveries.size).to eq(2)
+      expect(message.reload.status).to eq('sent')
     end
 
     it 'leaves a non-cards message untouched' do

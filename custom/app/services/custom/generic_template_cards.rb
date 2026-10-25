@@ -30,7 +30,7 @@ module Custom::GenericTemplateCards
   end
 
   def fallback_text(items)
-    usable(items).map { |item, links| "#{item[:title].strip}: #{links.first[:uri]}" }.join("\n")
+    usable(items).map { |item, links| "#{item[:title].to_s.strip}: #{links.first[:uri]}" }.join("\n")
   end
 
   # [item, link actions] for every item with a title and at least one link.
@@ -39,7 +39,7 @@ module Custom::GenericTemplateCards
       item = raw.to_h.with_indifferent_access
       links = Array(item[:actions]).map { |a| a.to_h.with_indifferent_access }
                                    .select { |a| a[:type] == 'link' && a[:uri].present? }
-      [item, links] if item[:title].present? && links.any?
+      [item, links] if item[:title].to_s.strip.present? && links.any?
     end
   end
 
@@ -54,10 +54,23 @@ module Custom::GenericTemplateCards
     element
   end
 
-  # Per character, never per byte, so a Bangla or emoji title is never cut
-  # mid code point.
+  # At most `max` code points, ellipsis included, cut between whole
+  # characters as a reader sees them: whole grapheme clusters, and never
+  # right after a virama or ZWJ, so a Bangla conjunct (ক + ্ + ষ) or a joined
+  # emoji is never cut in half.
   def clip(text, max)
     text = text.to_s.strip
-    text.length > max ? "#{text[0, max - 1]}…" : text
+    return text if text.length <= max
+
+    kept = +''
+    text.grapheme_clusters.each do |cluster|
+      break if kept.length + cluster.length > max - 1
+
+      kept << cluster
+    end
+    # A cluster ending in a virama (Bangla ্, Devanagari ्) or a ZWJ joins the
+    # next one on screen; Ruby's segmentation can still split there.
+    kept = kept.grapheme_clusters[0...-1].join while kept.end_with?("\u09CD", "\u094D", "\u200D")
+    "#{kept.rstrip}…"
   end
 end
