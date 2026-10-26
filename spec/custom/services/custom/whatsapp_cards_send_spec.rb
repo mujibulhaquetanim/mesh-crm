@@ -47,10 +47,14 @@ RSpec.describe Custom::WhatsappCardsSend do
   end
 
   around do |example|
-    ClimateControl.modify(CARD_MEDIA_ALLOWED_HOSTS: 'api.shop.test') { example.run }
+    ClimateControl.modify(CARD_MEDIA_ALLOWED_HOSTS: 'api.shop.test', CARD_MEDIA_REDIRECT_HOSTS: 'r2.shop.test') do
+      example.run
+    end
   end
 
   before do
+    # Test hosts resolve to a public address unless a test says otherwise.
+    allow(Resolv).to receive(:getaddresses).and_return(['93.184.216.34'])
     stub_request(:get, /message_templates/)
     stub_request(:post, text_url).to_return(ok('wamid.text'))
     stub_request(:get, photo_url).to_return(status: 302, headers: { 'Location' => 'https://r2.shop.test/photo.jpg' })
@@ -108,6 +112,26 @@ RSpec.describe Custom::WhatsappCardsSend do
 
     expect(a_request(:get, 'http://169.254.169.254/latest')).not_to have_been_made
     expect(a_request(:post, upload_url)).not_to have_been_made
+    expect(card_bodies.first['interactive']).not_to have_key('header')
+  end
+
+  it 'refuses a redirect to an https host on neither list' do
+    stub_cards(ok('wamid.c1'))
+    stub_request(:get, photo_url).to_return(status: 302, headers: { 'Location' => 'https://internal.corp.test/secret' })
+
+    service.send_message('+123456789', cards_message(items: [items.first]))
+
+    expect(a_request(:get, 'https://internal.corp.test/secret')).not_to have_been_made
+    expect(card_bodies.first['interactive']).not_to have_key('header')
+  end
+
+  it 'refuses a listed host that resolves to a private address' do
+    stub_cards(ok('wamid.c1'))
+    allow(Resolv).to receive(:getaddresses).with('api.shop.test').and_return(['10.0.0.5'])
+
+    service.send_message('+123456789', cards_message(items: [items.first]))
+
+    expect(a_request(:get, photo_url)).not_to have_been_made
     expect(card_bodies.first['interactive']).not_to have_key('header')
   end
 

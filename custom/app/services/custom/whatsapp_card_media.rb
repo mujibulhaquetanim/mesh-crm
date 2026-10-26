@@ -1,14 +1,22 @@
 require 'faraday/multipart'
+require 'ipaddr'
+require 'resolv'
 
 # Turns a card's `media_url` into a WhatsApp media id: the photo is fetched
 # here and uploaded to the Cloud API's media endpoint, so Meta never fetches
 # it from us (its fwdproxy rate limits per hosting ASN and answers 131053;
 # see Whatsapp::MediaUploadService, which does the same for attachments).
 #
-# ⚠ SSRF: `media_url` is message data. Only an https URL on a host listed in
-# CARD_MEDIA_ALLOWED_HOSTS (comma separated, e.g. `api.zasmate.com`) is
-# fetched; any redirect must stay on https. With the variable unset nothing
-# is fetched and every card goes without its photo.
+# ⚠ SSRF: `media_url` is message data, so every hop is checked:
+# - the first URL must be https on a host in CARD_MEDIA_ALLOWED_HOSTS (comma
+#   separated, exact, e.g. `api.zasmate.com`);
+# - a redirect must be https to a host in that list, or to a domain in
+#   CARD_MEDIA_REDIRECT_HOSTS (suffix match, e.g. `r2.cloudflarestorage.com`,
+#   where the API's photo route redirects);
+# - every host must resolve only to public addresses (no loopback, private,
+#   link-local or unspecified ones).
+# With CARD_MEDIA_ALLOWED_HOSTS unset nothing is fetched and every card goes
+# without its photo.
 #
 # Returns { 'id' => media_id }, or nil on any problem (the card then goes
 # without a header rather than not at all).
@@ -23,7 +31,7 @@ class Custom::WhatsappCardMedia
   end
 
   def media_for(url)
-    return unless allowed?(url)
+    return unless allowed?(url, redirect: false)
 
     image = fetch(url)
     image && upload(image)
@@ -34,15 +42,34 @@ class Custom::WhatsappCardMedia
 
   private
 
-  def allowed?(url)
+  def allowed?(url, redirect:)
     uri = URI.parse(url.to_s)
-    uri.is_a?(URI::HTTPS) && allowed_hosts.include?(uri.host.to_s.downcase)
+    host = uri.host.to_s.downcase
+    uri.is_a?(URI::HTTPS) && listed?(host, redirect) && public_host?(host)
   rescue URI::InvalidURIError
     false
   end
 
-  def allowed_hosts
-    ENV.fetch('CARD_MEDIA_ALLOWED_HOSTS', '').split(',').map { |h| h.strip.downcase }.reject(&:empty?)
+  def listed?(host, redirect)
+    return true if hosts('CARD_MEDIA_ALLOWED_HOSTS').include?(host)
+
+    redirect && hosts('CARD_MEDIA_REDIRECT_HOSTS').any? { |domain| host == domain || host.end_with?(".#{domain}") }
+  end
+
+  def hosts(variable)
+    ENV.fetch(variable, '').split(',').map { |h| h.strip.downcase }.reject(&:empty?)
+  end
+
+  # Every address the host resolves to is public; nothing resolved → refused.
+  def public_host?(host)
+    addresses = Resolv.getaddresses(host)
+    addresses.any? && addresses.none? { |address| private_address?(IPAddr.new(address)) }
+  rescue IPAddr::InvalidAddressError
+    false
+  end
+
+  def private_address?(ip)
+    ip.loopback? || ip.private? || ip.link_local? || ip.to_s == '0.0.0.0' || ip.to_s == '::'
   end
 
   # { body:, type: } for a JPEG or PNG within WhatsApp's 5 MB header limit,
@@ -53,7 +80,7 @@ class Custom::WhatsappCardMedia
       return image_from(response) unless redirect?(response)
 
       url = URI.join(url, response.headers['location']).to_s
-      return unless URI.parse(url).is_a?(URI::HTTPS)
+      return unless allowed?(url, redirect: true)
     end
     nil
   end
