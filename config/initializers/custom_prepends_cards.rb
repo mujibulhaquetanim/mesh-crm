@@ -1,5 +1,6 @@
 # Fork: card messages (content_type `cards`) on Messenger and Instagram go out as a generic
-# template after their text, instead of as the text alone. Same mechanism and
+# template after their text, and on WhatsApp Cloud as one photo-and-button message
+# per product after their text, instead of as the text alone. Same mechanism and
 # reasoning as config/initializers/custom_prepends.rb. See
 # custom/app/services/custom/generic_template_cards_send.rb.
 Rails.application.config.to_prepare do
@@ -8,4 +9,7 @@ Rails.application.config.to_prepare do
   [Facebook::SendOnFacebookService, Instagram::BaseSendService].each do |target|
     Custom::PrependOnce.call(target, Custom::GenericTemplateCardsSend)
   end
+  # WhatsApp Cloud: one photo-and-button message per product, after the text.
+  # See custom/app/services/custom/whatsapp_cards_send.rb.
+  Custom::PrependOnce.call(Whatsapp::Providers::WhatsappCloudService, Custom::WhatsappCardsSend)
 end
