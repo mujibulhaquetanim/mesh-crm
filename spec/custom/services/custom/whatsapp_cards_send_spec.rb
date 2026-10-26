@@ -93,6 +93,78 @@ RSpec.describe Custom::WhatsappCardsSend do
     expect(card_bodies.second['interactive']['body']['text']).to eq('*Hourglass Heel*')
   end
 
+  describe 'the carousel (main path)' do
+    let(:photo2_url) { 'https://api.shop.test/public/img/tok/v%3A2' }
+    let(:pictured) do
+      [items.first,
+       { title: 'Hourglass Heel', description: '৳999', media_url: photo2_url,
+         actions: [{ type: 'link', text: 'View details', uri: 'https://shop.test/hourglass' }] }]
+    end
+
+    before do
+      stub_request(:get, photo2_url).to_return(status: 302, headers: { 'Location' => 'https://r2.shop.test/photo.jpg' })
+    end
+
+    it 'sends ONE carousel with the reply as its body, and no separate text' do
+      stub_cards(ok('wamid.carousel'))
+
+      expect(service.send_message('+123456789', cards_message(items: pictured))).to eq('wamid.carousel')
+      expect(a_request(:post, text_url)).not_to have_been_made
+      expect(card_bodies.size).to eq(1)
+      carousel = card_bodies.first['interactive']
+      expect(carousel['type']).to eq('carousel')
+      expect(carousel['body']).to eq('text' => 'Here are some heels you might love!')
+      expect(carousel['action']['cards'].map { |c| c['card_index'] }).to eq([0, 1])
+    end
+
+    it 'gives each carousel card its photo, a short body and its button' do
+      stub_cards(ok('wamid.carousel'))
+      service.send_message('+123456789', cards_message(items: pictured))
+
+      card = card_bodies.first['interactive']['action']['cards'].first
+      expect(card).to include('type' => 'cta_url', 'header' => { 'type' => 'image', 'image' => { 'id' => 'media-1' } })
+      expect(card['body']['text']).to eq("*Spool Heel*\n৳999 · Rose gold block heel")
+      expect(card['action']).to eq('name' => 'cta_url',
+                                   'parameters' => { 'display_text' => 'View details', 'url' => 'https://shop.test/spool' })
+    end
+
+    it 'keeps a card body within 160 characters and one line break' do
+      stub_cards(ok('wamid.carousel'))
+      long = pictured.map { |i| i.merge(title: "Spool\nHeel", description: "line one\nline two #{'x' * 300}") }
+      service.send_message('+123456789', cards_message(items: long))
+
+      body = card_bodies.first['interactive']['action']['cards'].first['body']['text']
+      expect(body.length).to be <= 160
+      expect(body.count("\n")).to eq(1)
+    end
+
+    it 'falls back to the text and one message per product when WhatsApp refuses the carousel' do
+      stub_cards(refused, ok('wamid.c1'), ok('wamid.c2'))
+      message = cards_message(items: pictured)
+
+      expect(service.send_message('+123456789', message)).to eq('wamid.text')
+      expect(card_bodies.map { |b| b.dig('interactive', 'type') }).to eq(%w[carousel cta_url cta_url])
+      expect(message.reload.status).not_to eq('failed')
+    end
+
+    it 'sends a card without a photo as its own message after the carousel' do
+      stub_cards(ok('wamid.carousel'), ok('wamid.c3'))
+      three = pictured + [items.second.merge(title: 'Twinkle Mid Heel')]
+
+      expect(service.send_message('+123456789', cards_message(items: three))).to eq('wamid.carousel')
+      expect(card_bodies.map { |b| b.dig('interactive', 'type') }).to eq(%w[carousel cta_url])
+      expect(card_bodies.second['interactive']['body']['text']).to eq('*Twinkle Mid Heel*')
+    end
+
+    it 'sends a reply longer than a carousel body first, then the carousel under a pointer' do
+      stub_cards(ok('wamid.carousel'))
+      message = cards_message(content: 'x' * 1100, items: pictured)
+
+      expect(service.send_message('+123456789', message)).to eq('wamid.text')
+      expect(card_bodies.first['interactive']['body']).to eq('text' => '👇')
+    end
+  end
+
   it 'never fetches a photo from a host that is not allowed, and sends the card without it' do
     stub_cards(ok('wamid.c1'), ok('wamid.c2'))
     other = 'https://evil.test/x.jpg'
