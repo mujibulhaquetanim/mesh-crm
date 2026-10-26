@@ -130,10 +130,11 @@ RSpec.describe Custom::WhatsappCardsSend do
 
     it 'keeps a card body within 160 characters and one line break' do
       stub_cards(ok('wamid.carousel'))
-      long = pictured.map { |i| i.merge(title: "Spool\nHeel", description: "line one\nline two #{'x' * 300}") }
+      long = pictured.map { |i| i.merge(title: "*Spool*\nHeel", description: "line one\nline two #{'x' * 300}") }
       service.send_message('+123456789', cards_message(items: long))
 
       body = card_bodies.first['interactive']['action']['cards'].first['body']['text']
+      expect(body).to start_with("*Spool Heel*\nline one line two")
       expect(body.length).to be <= 160
       expect(body.count("\n")).to eq(1)
     end
