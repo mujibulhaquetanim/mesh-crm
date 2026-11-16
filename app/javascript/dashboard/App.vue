@@ -9,6 +9,7 @@ import PaymentPendingBanner from './components/app/PaymentPendingBanner.vue';
 import PendingEmailVerificationBanner from './components/app/PendingEmailVerificationBanner.vue';
 import LowBackupCodesBanner from './components/app/LowBackupCodesBanner.vue';
 import AgenticAiLimitBanner from './fork/AgenticAiLimitBanner.vue';
+import { useAccountTabTitle } from './fork/tabTitle';
 import FeatureAnnouncement from './components-next/feature-announcement/FeatureAnnouncement.vue';
 import vueActionCable from './helper/actionCable';
 import { useRouter } from 'vue-router';
@@ -44,7 +45,9 @@ export default {
   setup() {
     const router = useRouter();
     const store = useStore();
-    const { accountId } = useAccount();
+    const { accountId, currentAccount } = useAccount();
+    // Fork-only: the browser tab names the account, not the installation.
+    useAccountTabTitle(currentAccount);
     // Use the font size composable (it automatically sets up the watcher)
     const { currentFontSize } = useFontSize();
     const { uiSettings } = useUISettings();
