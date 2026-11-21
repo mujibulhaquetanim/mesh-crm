@@ -81,10 +81,14 @@ module Custom::GenericTemplateCardsSend
   end
 
   # The text's mid stays the stored one; a cards-only message keeps the cards'.
-  # Instagram's `process_response` overwrites `source_id` on every send.
+  # Instagram's `process_response` overwrites `source_id` on every send. The
+  # cards' own mid is recorded either way (Custom::MetaPartIds), so a reply to
+  # the cards still finds this message.
   def keep_mid(text_mid, mid)
+    Custom::MetaPartIds.add(message, mid)
     wanted = text_mid.presence || mid
-    message.update!(source_id: wanted) if wanted.present? && message.source_id != wanted
+    message.source_id = wanted if wanted.present?
+    message.save! if message.changed?
   end
 
   # The Meta message id, or nil when Meta refused it. Messenger's
