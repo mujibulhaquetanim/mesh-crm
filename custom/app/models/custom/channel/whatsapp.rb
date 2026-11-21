@@ -93,9 +93,7 @@ module Custom::Channel::Whatsapp
   # knows a tenant's number could inject customer messages the AI answers. Such
   # a channel is not pending here — the installation secret verifies it.
   def app_secret_pending?
-    return false if GlobalConfigService.load('WHATSAPP_APP_SECRET', nil).present?
-
-    super
+    super && !installation_verifies_webhooks?
   end
 
   private
@@ -115,9 +113,13 @@ module Custom::Channel::Whatsapp
   # Only when the installation HAS a secret: with none, nothing would verify
   # these webhooks, and upstream's requirement stands (fail closed).
   def app_secret_required?
-    return false if GlobalConfigService.load('WHATSAPP_APP_SECRET', nil).present?
+    super && !installation_verifies_webhooks?
+  end
 
-    super
+  # Read only after upstream has decided a secret matters, so channels it never
+  # asks about (embedded signup, 360dialog) cause no config read.
+  def installation_verifies_webhooks?
+    GlobalConfigService.load('WHATSAPP_APP_SECRET', nil).present?
   end
 
   def validate_provider_config
