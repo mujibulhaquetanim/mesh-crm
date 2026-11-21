@@ -1,6 +1,16 @@
 # pre-build stage
 FROM node:24.22.1-alpine as node
-FROM ruby:3.4.4-alpine3.21 AS pre-builder
+
+# npm and corepack are only needed to build assets and to install pnpm in
+# non-production images; production only runs the node binary
+FROM node AS node-modules
+ARG RAILS_ENV=production
+RUN if [ "$RAILS_ENV" = "production" ]; then \
+  rm -rf /usr/local/lib/node_modules/* \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack; \
+  fi
+
+FROM ruby:3.4.13-alpine3.23 AS pre-builder
 
 ARG NODE_VERSION="24.22.1"
 ARG PNPM_VERSION="10.2.0"
@@ -91,7 +101,7 @@ RUN mkdir -p /app/log
 # misconfigured deploy.
 RUN if [ "$RAILS_ENV" = "production" ]; then \
   SECRET_KEY_BASE_DUMMY=1 RAILS_LOG_TO_STDOUT=enabled bundle exec rake assets:precompile \
-  && rm -rf spec node_modules tmp/cache; \
+  && rm -rf spec tests node_modules tmp/cache; \
   fi
 
 # Generate .git_sha file with current commit hash
@@ -104,7 +114,7 @@ RUN rm -rf /gems/ruby/3.4.0/cache/*.gem \
   && rm .gitignore
 
 # final build stage
-FROM ruby:3.4.4-alpine3.21
+FROM ruby:3.4.13-alpine3.23
 
 ARG NODE_VERSION="24.22.1"
 ARG PNPM_VERSION="10.2.0"
@@ -128,7 +138,8 @@ ARG RAILS_ENV=production
 ENV RAILS_ENV ${RAILS_ENV}
 ENV BUNDLE_PATH="/gems"
 
-RUN apk update && apk add --no-cache \
+# apk upgrade picks up Alpine security fixes released after the base image
+RUN apk update && apk upgrade --no-cache && apk add --no-cache \
   build-base \
   openssl \
   tzdata \
@@ -142,7 +153,7 @@ RUN apk update && apk add --no-cache \
 ENV VIPS_BLOCK_UNTRUSTED=1
 
 COPY --from=node /usr/local/bin/node /usr/local/bin/
-COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
+COPY --from=node-modules /usr/local/lib/node_modules /usr/local/lib/node_modules
 
 RUN if [ "$RAILS_ENV" != "production" ]; then \
   apk add --no-cache curl \

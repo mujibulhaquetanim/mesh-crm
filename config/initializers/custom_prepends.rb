@@ -11,9 +11,10 @@
 # `to_prepare` (not a bare constant reference) so the prepend survives Zeitwerk
 # reloading in development — and `Custom::PrependOnce` (not a bare `prepend`)
 # so that reloading does not STACK the overlay on a target the reloader keeps.
-# `Devise::PasswordsController` below is exactly that case: it comes from a gem
-# and is loaded once, while the overlay prepended onto it is rebuilt on every
-# reload. See custom/app/services/custom/prepend_once.rb for the full reasoning.
+# `ChatwootFbProvider` below is exactly that case: it is defined inside an
+# initializer and loaded once, while the overlay prepended onto it is rebuilt on
+# every reload. See custom/app/services/custom/prepend_once.rb for the full
+# reasoning.
 Rails.application.config.to_prepare do
   # Assignee picker: upstream builds the list inline instead of delegating to
   # Inbox#assignable_agents, so the model override alone does not cover it.
@@ -40,18 +41,6 @@ Rails.application.config.to_prepare do
   Custom::PrependOnce.call(
     Webhooks::WhatsappController,
     Custom::Webhooks::WhatsappController
-  )
-
-  # Super Admin password reset: stock Devise::PasswordsController auto-signs
-  # in after a successful reset, bypassing the MFA-enforcing
-  # SuperAdmin::Devise::SessionsController#create entirely. Guarded to the
-  # :super_admin scope + SUPER_ADMIN_ENFORCE_MFA — see
-  # custom/app/controllers/custom/devise_overrides/super_admin_passwords_guard.rb.
-  #
-  # Gem-owned, non-reloadable target — the one the guard actually exists for.
-  Custom::PrependOnce.call(
-    Devise::PasswordsController,
-    Custom::DeviseOverrides::SuperAdminPasswordsGuard
   )
 
   # Messenger webhook subscription handshake (GET /bot): the token Meta sends

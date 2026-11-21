@@ -1,18 +1,19 @@
 require 'rails_helper'
 
-# `SuperAdmin < User` and User is `:registerable`, so `devise_for :super_admins`
-# used to route a full self-signup surface onto the operator console — including
-# an unauthenticated GET /super_admin/sign_up + POST /super_admin, and an
-# authenticated DELETE /super_admin that deletes the operator's own account.
-# config/routes.rb now passes `skip: [:registrations]`.
+# `SuperAdmin < User` and User is `:registerable` and `:recoverable`, so a bare
+# `devise_for :super_admins` would route a self-signup surface (an
+# unauthenticated GET /super_admin/sign_up + POST /super_admin, and a DELETE
+# /super_admin that deletes the operator's own account) and a password-reset
+# surface onto the operator console. The fork skipped registrations first;
+# upstream (#16461) now skips registrations, passwords and confirmations.
 #
-# The second describe block is the other half of that change: skipping the
-# routes does NOT make `devise_mapping.registerable?` false (that predicate
-# reads the model's devise modules, not the routes), so Devise's stock
-# devise/shared/_links partial would go on linking to the helper the skip just
-# removed and take the operator's password-recovery pages down with a
-# NoMethodError. custom/app/views/devise/shared/_links.html.erb is what stops
-# that, and these are the pages that prove it.
+# These examples pin that the whole surface stays unrouted, because the fork
+# dropped its own guards for it once upstream removed the routes:
+# Custom::DeviseOverrides::SuperAdminPasswordsGuard (a password reset signed the
+# operator in without the MFA check), the `super_admin_password/*` throttles,
+# and the devise/shared/_links shadow those pages needed. If a future upstream
+# sync routes any of it again, this file goes red before those guards are
+# missed.
 RSpec.describe 'Super Admin registration routes', type: :request do
   describe 'the self-signup surface' do
     it 'does not route GET /super_admin/sign_up' do
@@ -44,56 +45,33 @@ RSpec.describe 'Super Admin registration routes', type: :request do
     end
   end
 
-  describe 'the recovery pages that render devise/shared/_links' do
-    # History, because this reads oddly otherwise: BOTH of these pages used to
-    # fail outright, before AND after this change, on a second and unrelated
-    # bug — Devise's partial also links to `omniauth_authorize_path`, a helper
-    # this app never generates (Chatwoot wires omniauth through
-    # `OmniAuth::Builder` middleware rather than `Devise.setup`). That was
-    # fixed on 2026-08-20 in the same view shadow, so these pages now render
-    # for real; see super_admin_password_pages_spec.rb, which asserts the 200s
-    # directly. These examples deliberately do NOT assert status — they assert
-    # the narrower thing that is this change's business.
-    #
-    # What IS this change's business is that they must not fail on the helper
-    # `skip: [:registrations]` deleted. Remove
-    # custom/app/views/devise/shared/_links.html.erb and both examples go red
-    # with `undefined method 'new_super_admin_registration_path'` — that is the
-    # regression the shadow exists to prevent, and it was watched failing.
-    #
-    # Exceptions are let through rather than rendered: the rendered 500 page
-    # quotes the failing template's source, and the shadow's own header comment
-    # names the helper, so sniffing `response.body` would match the comment
-    # rather than the failure. Written so it stays green either way if the
-    # omniauth bug above is ever fixed and these pages start rendering.
-    around do |example|
-      original = Rails.application.env_config['action_dispatch.show_exceptions']
-      Rails.application.env_config['action_dispatch.show_exceptions'] = :none
-      example.run
-    ensure
-      Rails.application.env_config['action_dispatch.show_exceptions'] = original
+  describe 'the password-recovery and confirmation surface' do
+    it 'does not route GET /super_admin/password/new' do
+      get '/super_admin/password/new'
+
+      expect(response).to have_http_status(:not_found)
     end
 
-    def outcome_of
-      yield
-      response.body
-    rescue StandardError => e
-      "#{e.class}: #{e.message}"
+    it 'does not route POST /super_admin/password (reset request)' do
+      post '/super_admin/password', params: { super_admin: { email: 'x@example.com' } }
+
+      expect(response).to have_http_status(:not_found)
     end
 
-    it 'does not fail on the registration helper the skip removed (reset request page)' do
-      outcome = outcome_of { get '/super_admin/password/new' }
+    it 'does not route PUT /super_admin/password (token submission that used to sign in)' do
+      put '/super_admin/password', params: { super_admin: { reset_password_token: 'x', password: 'Password1!' } }
 
-      expect(outcome).not_to include('new_super_admin_registration_path')
+      expect(response).to have_http_status(:not_found)
     end
 
-    it 'does not fail on the registration helper the skip removed (emailed reset form)' do
-      super_admin = create(:super_admin, password: 'Password1!')
-      token = super_admin.send_reset_password_instructions
+    it 'does not route GET /super_admin/confirmation' do
+      get '/super_admin/confirmation'
 
-      outcome = outcome_of { get "/super_admin/password/edit?reset_password_token=#{token}" }
+      expect(response).to have_http_status(:not_found)
+    end
 
-      expect(outcome).not_to include('new_super_admin_registration_path')
+    it 'leaves password, confirmation and registration out of the devise mapping' do
+      expect(Devise.mappings[:super_admin].used_routes).not_to include(:password, :confirmation, :registration)
     end
 
     it 'no longer defines the registration route helper at all' do
