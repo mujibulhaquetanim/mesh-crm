@@ -41,18 +41,15 @@ RSpec.describe 'Platform Users API (super admin privilege separation)', type: :r
       expect(SuperAdmin.exists?(email: 'escalate@vendor.example.com')).to be(false)
     end
 
-    # NOT a second exercise of the strong-params strip above: `create` is
-    # `@resource = (User.from_email(user_params[:email]) || User.new(user_params))`
-    # — on the found-user branch, `user_params` is used only to look up the
-    # email; it is never assigned onto `@resource` at all (no `update!`/
-    # `assign_attributes`). So this pins a DIFFERENT, stronger invariant than
-    # the test above: an existing user's `type` can't be touched through this
-    # path regardless of what strong params would or wouldn't strip, because
-    # nothing here mass-assigns onto them in the first place. If `type` ever
-    # re-entered the permit list, THIS example would still pass — the one
-    # above is what would catch that.
+    # NOT a second exercise of the strong-params strip above: on the found-user
+    # branch `user_params` is used only to look up the email and is never
+    # assigned onto the user. So this pins a stronger invariant: an existing
+    # user's `type` cannot be touched through this path at all. Upstream #16530
+    # (2026-11-21 sync) also refuses (401) a found user the calling platform
+    # app does not manage; both branches are pinned.
     it 'leaves an existing user’s type untouched — the found-user branch applies no attributes at all' do
       existing = create(:user, email: 'already-here@vendor.example.com')
+      create(:platform_app_permissible, platform_app: platform_app, permissible: existing)
 
       post '/platform/api/v1/users',
            params: { name: 'Attempted Escalation', email: 'already-here@vendor.example.com',
@@ -60,6 +57,18 @@ RSpec.describe 'Platform Users API (super admin privilege separation)', type: :r
            headers: auth_headers, as: :json
 
       expect(response).to have_http_status(:success)
+      expect(existing.reload.type).to be_nil
+    end
+
+    it 'refuses an existing user the platform app does not manage, and leaves its type untouched' do
+      existing = create(:user, email: 'not-ours@vendor.example.com')
+
+      post '/platform/api/v1/users',
+           params: { name: 'Attempted Escalation', email: 'not-ours@vendor.example.com',
+                     password: 'Password1!', type: 'SuperAdmin' },
+           headers: auth_headers, as: :json
+
+      expect(response).to have_http_status(:unauthorized)
       expect(existing.reload.type).to be_nil
     end
   end

@@ -148,9 +148,45 @@ RSpec.describe Channel::Whatsapp do
   end
 
   context 'when the installation has no app secret' do
-    it 'keeps upstream behavior and makes no Graph call' do
-      expect(manual_channel).to be_valid
+    # Upstream #16548: with nothing installation-wide to verify with, a new
+    # manual channel must bring its own secret. The fork only waives that when
+    # the installation has one (Custom::Channel::Whatsapp#app_secret_required?).
+    it "keeps upstream's requirement for the channel's own app secret" do
+      channel = manual_channel
+
+      expect(channel).not_to be_valid
+      expect(channel.errors[:provider_config]).to include('App secret is required')
+    end
+
+    it 'stays app-secret pending without a channel secret, as upstream decides' do
+      expect(manual_channel.app_secret_pending?).to be(true)
+    end
+
+    it 'keeps upstream behavior with a channel secret and makes no Graph call' do
+      expect(manual_channel('app_secret' => 'channel-secret')).to be_valid
       expect(a_request(:get, debug_token_url)).not_to have_been_made
+    end
+  end
+
+  context 'when the installation has an app secret' do
+    around do |example|
+      with_modified_env(WHATSAPP_APP_SECRET: installation_secret, WHATSAPP_APP_ID: installation_app_id) { example.run }
+    end
+
+    # The platform's own WhatsApp connect flow creates exactly this channel:
+    # manual source, no app secret (it is shown to every tenant admin).
+    it 'does not require a per-channel app secret' do
+      stub_token_app(app_id: installation_app_id)
+      channel = manual_channel
+
+      expect(channel).to be_valid
+      expect(channel.errors[:provider_config]).not_to include('App secret is required')
+    end
+
+    # Upstream accepts a "pending" channel's unsigned webhooks with a warning;
+    # verified by the installation secret, this channel is never pending.
+    it 'is not app-secret pending' do
+      expect(manual_channel.app_secret_pending?).to be(false)
     end
   end
 end
