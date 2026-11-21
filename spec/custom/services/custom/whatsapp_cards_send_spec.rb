@@ -249,6 +249,28 @@ RSpec.describe Custom::WhatsappCardsSend do
     expect(message.external_error).to eq('The product cards could not be delivered')
   end
 
+  # A reply to one card quotes THAT card's wamid; the message stores the text's.
+  it 'records every card wamid, so a reply to one card finds the message' do
+    stub_cards(ok('wamid.c1'), ok('wamid.c2'))
+    message = cards_message
+    id = service.send_message('+123456789', message)
+    message.update!(source_id: id) # what Whatsapp::SendOnWhatsappService does next
+
+    expect(message.reload.content_attributes['meta_part_ids']).to contain_exactly('wamid.c1', 'wamid.c2', 'wamid.text')
+
+    reply = create(:message, conversation: conversation, message_type: :incoming, inbox: whatsapp_channel.inbox,
+                             content: 'how much?', content_attributes: { in_reply_to_external_id: 'wamid.c2' })
+    expect(reply.reload.content_attributes['in_reply_to']).to eq(message.id)
+  end
+
+  it 'records no refused card' do
+    stub_cards(ok('wamid.c1'), refused, ok('wamid.fallback'))
+    message = cards_message
+    message.update!(source_id: service.send_message('+123456789', message))
+
+    expect(message.reload.content_attributes['meta_part_ids']).to contain_exactly('wamid.c1', 'wamid.fallback', 'wamid.text')
+  end
+
   it 'keeps the first card wamid for a cards-only message' do
     stub_cards(ok('wamid.c1'), ok('wamid.c2'))
 

@@ -43,6 +43,15 @@ Rails.application.config.to_prepare do
     Custom::Webhooks::WhatsappController
   )
 
+  # Reply-to on one part of a multi-part message (text, a photo, the product
+  # cards): find the message by any of its recorded Meta ids, and keep the
+  # quoted id when nothing matches instead of clearing it. See
+  # custom/app/services/custom/in_reply_to_part_lookup.rb.
+  Custom::PrependOnce.call(
+    Messages::InReplyToMessageBuilder,
+    Custom::InReplyToPartLookup
+  )
+
   # Messenger webhook subscription handshake (GET /bot): the token Meta sends
   # must equal FB_VERIFY_TOKEN (constant-time; unset rejects everything). See
   # custom/app/services/custom/facebook_messenger_verify_token.rb.
