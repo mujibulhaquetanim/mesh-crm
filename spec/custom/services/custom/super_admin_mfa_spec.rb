@@ -1,13 +1,8 @@
 require 'rails_helper'
 
 # Pins the truthiness table of the single SUPER_ADMIN_ENFORCE_MFA reader.
-# Three surfaces call this — the sign-in check, the password-reset guard, and
-# the sign-in form's otp_attempt field — and they have to agree, so the values
-# that count as "on" are behaviour, not an implementation detail.
-#
-# These are the semantics the three inlined copies had before they were merged
-# into this predicate (ActiveModel::Type::Boolean), asserted so the merge can
-# be shown to have changed nothing.
+# The sign-in check calls this, so the values that count as "on" are
+# behaviour, not an implementation detail.
 RSpec.describe Custom::SuperAdminMfa do
   describe '.enforced?' do
     it 'is falsey when the flag is unset (the default — enforcement is opt-in)' do

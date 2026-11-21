@@ -64,12 +64,6 @@ RSpec.describe Custom::PrependOnce do
   # so a future refactor of config/initializers/custom_prepends.rb that drops
   # the guard (or the prepend) is caught here and not in production.
   describe 'the fork overlays wired in config/initializers/custom_prepends.rb' do
-    it 'applies the super_admin password-reset guard exactly once' do
-      expect(
-        named_ancestor_count(Devise::PasswordsController, 'Custom::DeviseOverrides::SuperAdminPasswordsGuard')
-      ).to eq(1)
-    end
-
     it 'applies the assignable-agents overlay exactly once' do
       expect(
         named_ancestor_count(Api::V1::Accounts::AssignableAgentsController,

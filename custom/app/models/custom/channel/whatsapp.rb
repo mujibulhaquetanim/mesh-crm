@@ -86,7 +86,41 @@ module Custom::Channel::Whatsapp
     'webhooks with. A token from a different Meta app gets every incoming message rejected. ' \
     'Use a token generated from that app.'.freeze
 
+  # Upstream #16548 calls a manual cloud channel without its own app secret
+  # "pending", and Webhooks::WhatsappController then ACCEPTS its unsigned or
+  # wrongly signed posts with only a warning. With an installation secret that
+  # is the hole Custom::Webhooks::WhatsappController exists to close: anyone who
+  # knows a tenant's number could inject customer messages the AI answers. Such
+  # a channel is not pending here — the installation secret verifies it.
+  def app_secret_pending?
+    super && !installation_verifies_webhooks?
+  end
+
   private
+
+  # ## A per-channel app secret is not required when the installation verifies
+  #
+  # Upstream #16548 makes a NEW manual WhatsApp Cloud channel carry its own
+  # `provider_config['app_secret']`, so its webhooks can be verified. This
+  # platform never stores one there by design (see "Why" above: an app secret
+  # is app-wide, and `provider_config` is shown to every tenant administrator);
+  # `Custom::Webhooks::WhatsappController` verifies those channels with the
+  # installation's `WHATSAPP_APP_SECRET` instead, and refuses unsigned posts
+  # once it is set. Without this, every inbox the platform's own WhatsApp
+  # connect flow creates (agentic-str `createWhatsappInbox`: manual source, no
+  # secret) is refused with "App secret is required".
+  #
+  # Only when the installation HAS a secret: with none, nothing would verify
+  # these webhooks, and upstream's requirement stands (fail closed).
+  def app_secret_required?
+    super && !installation_verifies_webhooks?
+  end
+
+  # Read only after upstream has decided a secret matters, so channels it never
+  # asks about (embedded signup, 360dialog) cause no config read.
+  def installation_verifies_webhooks?
+    GlobalConfigService.load('WHATSAPP_APP_SECRET', nil).present?
+  end
 
   def validate_provider_config
     super
