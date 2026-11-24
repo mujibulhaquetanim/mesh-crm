@@ -22,12 +22,16 @@ RSpec.describe 'Webhooks::WhatsappController (fork signature enforcement)', type
   # every tenant admin — see Custom::Channel::Whatsapp).
   #
   # The factory stamps `source => 'embedded_signup'` at create time to keep the
-  # real webhook-registration call from firing; stripping it afterwards with
-  # `update!` leaves a manual-source channel without re-running the create-only
-  # `after_commit :setup_webhooks`.
+  # real webhook-registration call from firing; stripping it afterwards leaves a
+  # manual-source channel without re-running the create-only
+  # `after_commit :setup_webhooks`. Saved without validation, as upstream's own
+  # spec does: since #16548 a switch from embedded signup to manual needs an app
+  # secret when the installation has none (the "no installation secret" context
+  # below models a channel that predates that rule).
   let(:manual_cloud_channel) do
     channel = create(:channel_whatsapp, provider: 'whatsapp_cloud', sync_templates: false, validate_provider_config: false)
-    channel.update!(provider_config: channel.provider_config.except('source'))
+    channel.provider_config = channel.provider_config.except('source')
+    channel.save!(validate: false)
     channel
   end
 
@@ -138,7 +142,10 @@ RSpec.describe 'Webhooks::WhatsappController (fork signature enforcement)', type
       # X-Hub-Signature-256, so requiring one would take the inbox offline.
       dialog_channel = create(:channel_whatsapp, provider: 'default', sync_templates: false, validate_provider_config: false)
 
-      post_webhook(dialog_channel, body)
+      # Upstream (2026-11-21 sync) checks the channel's own `webhook_token` on
+      # 360dialog posts; that is its check, not a signature, so send it.
+      post "/webhooks/whatsapp/#{dialog_channel.phone_number}?webhook_token=#{dialog_channel.provider_config['webhook_token']}",
+           params: body, headers: { 'CONTENT_TYPE' => 'application/json' }
 
       expect(response).to have_http_status(:success)
       expect(Webhooks::WhatsappEventsJob).to have_received(:perform_later)

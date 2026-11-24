@@ -94,6 +94,22 @@ class Rack::Attack
       email = get_header('HTTP_EMAIL').presence if email.nil? && include_header
       email&.downcase&.gsub(/\s+/, '')
     end
+
+    def normalized_super_admin_email
+      email = super_admin_params&.dig('email')
+      email.downcase.gsub(/\s+/, '') if email.is_a?(String) && email.present?
+    end
+
+    def super_admin_mfa_submission?
+      !super_admin_params&.dig('otp_code').nil?
+    end
+
+    def super_admin_params
+      scoped_params = params['super_admin'].presence || ActionDispatch::Request.new(env).params['super_admin']
+      scoped_params if scoped_params.is_a?(Hash)
+    rescue StandardError
+      nil
+    end
   end
 
   ### Safelist IPs from Environment Variable ###
@@ -133,84 +149,19 @@ class Rack::Attack
 
   ### Prevent Brute-Force Super Admin Login Attacks ###
   throttle('super_admin_login/ip', limit: 5, period: 5.minutes) do |req|
-    req.ip if req.path_without_extensions == '/super_admin/sign_in' && req.post?
+    req.ip if req.path_without_extensions == '/super_admin/sign_in' && req.post? && !req.super_admin_mfa_submission?
   end
 
-  # FORK: reads `super_admin[email]`, and returns nil rather than '' when absent.
-  #
-  # Upstream (#3830) looks for a FLAT `email` param, but Devise namespaces this
-  # scope's form fields under the resource name — the sign-in form posts
-  # `super_admin[email]`. So the lookup always missed and the block returned
-  # `''` (not nil) for EVERY attempt, which rack_attack treats as a real key:
-  # one shared bucket for the whole instance.
-  #
-  # That inverted what the throttle is named for. It never limited per email,
-  # and it created a lockout vector instead — any 5 failed sign-ins, from any
-  # source, against any address (or a nonexistent one), locked EVERY operator
-  # out of the console for 15 minutes. A single unauthenticated client could
-  # hold the platform's operators out indefinitely for the cost of one request
-  # every three minutes.
-  #
-  # Per-email keying is not a loosening: `super_admin_login/ip` above still
-  # bounds attempts at 5/5min per IP, independently, and remains the
-  # brute-force control. This restores the second, complementary axis upstream
-  # intended.
-  #
-  # Shape mirrors the `super_admin_password/email` throttle below, including
-  # the `is_a?(Hash)` check — a crafted `?super_admin=x` makes the value a
-  # String, and String has no #dig, which would raise inside the throttle block
-  # instead of refusing the request.
+  throttle('super_admin_mfa/ip', limit: 10, period: 1.minute) do |req|
+    req.ip if req.path_without_extensions == '/super_admin/sign_in' && req.post? && req.super_admin_mfa_submission?
+  end
+
   throttle('super_admin_login/email', limit: 5, period: 15.minutes) do |req|
     if req.path_without_extensions == '/super_admin/sign_in' && req.post?
-      # NOTE: parsing stays inside the path check — a malformed body elsewhere
-      # raises ArgumentError on invalid UTF-8.
+      # NOTE: This line used to throw ArgumentError /rails/action_mailbox/sendgrid/inbound_emails : invalid byte sequence in UTF-8
+      # Hence placed in the if block
       # ref: https://github.com/rack/rack-attack/issues/399
-      scoped = ActionDispatch::Request.new(req.env).params['super_admin']
-      email = (scoped['email'].presence if scoped.is_a?(Hash)) || req.params['email'].presence
-      email.to_s.downcase.gsub(/\s+/, '') if email
-    end
-  end
-
-  ### FORK: Prevent Brute-Force Super Admin Password-Reset Attacks ###
-  #
-  # `devise_for :super_admins` doesn't skip `:recoverable`, so stock
-  # Devise::PasswordsController is live at /super_admin/password — a second,
-  # login-shaped path onto the highest-blast-radius scope in the fleet, which
-  # the throttles above (scoped to /super_admin/sign_in) do not cover at all.
-  # Two things are brute-forceable here: POST floods reset mail at a guessed
-  # operator address, and PUT/PATCH guesses `reset_password_token`.
-  #
-  # Same shape as the `reset_password/*` pair below for the tenant scope
-  # (/auth/password), pointed at the operator scope's path and matching its
-  # limits.
-  throttle('super_admin_password/ip', limit: 5, period: 30.minutes) do |req|
-    # Covers the token-submission verbs too, not just the request-a-reset POST
-    # — the token guess is the half of this flow that ends in a session.
-    # (A browser submitting Devise's reset form arrives as POST + `_method=put`,
-    # which Rack::Request reports as `post?`; put?/patch? catch the non-browser
-    # callers that send the real verb.)
-    req.ip if req.path_without_extensions == '/super_admin/password' && (req.post? || req.put? || req.patch?)
-  end
-
-  throttle('super_admin_password/email', limit: 5, period: 1.hour) do |req|
-    # Only the POST carries an email. Reading it out of `super_admin[email]`
-    # rather than a top-level `email` param is deliberate: Devise namespaces
-    # this scope's form fields under the resource name, so the flat lookup the
-    # neighbouring throttles use finds nothing here.
-    #
-    # Returning nil for every other request matters — a blank key would put
-    # all of them in ONE shared bucket, and any single client could then
-    # exhaust it and lock every operator out of password recovery.
-    if req.path_without_extensions == '/super_admin/password' && req.post?
-      # NOTE: parsing guarded behind the path check for the same reason as the
-      # login throttle above — a malformed body elsewhere raises ArgumentError
-      # on invalid UTF-8. ref: https://github.com/rack/rack-attack/issues/399
-      # `is_a?(Hash)` rather than `dig`: a crafted `?super_admin=x` makes the
-      # value a String, and String has no #dig — that would raise inside the
-      # throttle block instead of refusing the request.
-      scoped = ActionDispatch::Request.new(req.env).params['super_admin']
-      email = scoped.is_a?(Hash) ? scoped['email'].presence : nil
-      email.to_s.downcase.gsub(/\s+/, '') if email
+      req.normalized_super_admin_email
     end
   end
 
@@ -439,6 +390,16 @@ class Rack::Attack
   throttle('/api/v1/accounts/:account_id/conversations/meta/user',
            limit: ENV.fetch('RATE_LIMIT_CONVERSATIONS_META', '30').to_i, period: 1.minute) do |req|
     match_data = %r{/api/v1/accounts/(?<account_id>\d+)/conversations/meta}.match(req.path)
+    next unless match_data.present? && req.get?
+
+    user_identifier = req.api_user_identifier
+
+    "#{user_identifier}:#{match_data[:account_id]}" if user_identifier.present?
+  end
+
+  throttle('/api/v1/accounts/:account_id/conversations/user',
+           limit: ENV.fetch('RATE_LIMIT_CONVERSATIONS_LIST', '1000').to_i, period: 1.minute) do |req|
+    match_data = %r{\A/api/v1/accounts/(?<account_id>\d+)/conversations\z}.match(req.path_without_extensions)
     next unless match_data.present? && req.get?
 
     user_identifier = req.api_user_identifier

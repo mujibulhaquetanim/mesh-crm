@@ -46,6 +46,12 @@ module Custom::WhatsappCardsSend
       return nil if text_id.blank?
     end
     deliver_cards(phone_number, message, cards, text_id, carousel: carousel)
+  ensure
+    # Every card message that went (card_sent), so a reply to any one card finds
+    # this message. In memory only: upstream's Whatsapp::SendOnWhatsappService
+    # saves the message right after, with the returned wamid as `source_id`.
+    Custom::MetaPartIds.add(message, @sent_card_ids.to_a)
+    @sent_card_ids = nil
   end
 
   private
@@ -115,6 +121,11 @@ module Custom::WhatsappCardsSend
     sent.compact
   end
 
+  def card_sent(id)
+    (@sent_card_ids ||= []) << id if id.is_a?(String)
+    id
+  end
+
   # The wamid, :refused when WhatsApp answered with an error, or nil after a
   # timeout (it may have been delivered, so no fallback for it).
   def post_card(phone_number, interactive)
@@ -124,7 +135,7 @@ module Custom::WhatsappCardsSend
       body: { messaging_product: 'whatsapp', **recipient_params(phone_number), type: 'interactive',
               interactive: interactive }.to_json
     )
-    Custom::WhatsappProductCards.wamid_or_refused(response, whatsapp_channel.inbox&.id)
+    card_sent(Custom::WhatsappProductCards.wamid_or_refused(response, whatsapp_channel.inbox&.id))
   rescue Net::ReadTimeout, Net::OpenTimeout => e
     Rails.logger.warn("WhatsappCardsSend: no answer for a card on inbox #{whatsapp_channel.inbox&.id} (#{e.class}); no fallback")
     nil
@@ -138,7 +149,7 @@ module Custom::WhatsappCardsSend
               text: { body: Custom::WhatsappProductCards.fallback_text(pairs) } }.to_json
     )
     id = Custom::WhatsappProductCards.wamid_or_refused(response, whatsapp_channel.inbox&.id)
-    id == :refused ? nil : id
+    id == :refused ? nil : card_sent(id)
   rescue StandardError => e
     Rails.logger.warn("WhatsappCardsSend: fallback failed on inbox #{whatsapp_channel.inbox&.id}: #{e.class}: #{e.message}")
     nil
