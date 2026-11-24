@@ -25,6 +25,19 @@ describe('tabTitleFor', () => {
   });
 });
 
+describe('tabTitleFor — text direction (2026-11-24 review)', () => {
+  it('drops direction overrides, so a name cannot show the tab text reversed', () => {
+    expect(tabTitleFor('Shop\u202Eevil\u202C', 'Inbox')).toBe('Shopevil');
+    expect(tabTitleFor('\u2066Rina\u2069', 'Inbox')).toBe('Rina');
+    expect(tabTitleFor('\u202E', 'Inbox')).toBe('Inbox');
+  });
+
+  it('keeps the zero-width joiner Bangla script needs', () => {
+    // র‍্য: the joiner (U+200D) is part of the word.
+    expect(tabTitleFor('র\u200D্যাব শপ', 'Inbox')).toBe('র\u200D্যাব শপ');
+  });
+});
+
 describe('useAccountTabTitle', () => {
   beforeEach(() => {
     document.title = 'Inbox';
